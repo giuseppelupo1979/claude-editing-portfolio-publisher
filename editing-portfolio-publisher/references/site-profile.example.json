@@ -13,7 +13,7 @@
     "remote_helper": "/home/publisher/.local/share/editing-portfolio-publisher/remote_directus.mjs"
   },
   "directus": {
-    "token_file": "/home/publisher/.config/editing-portfolio-publisher/directus-token",
+    "token_file": "/home/publisher/.config/editing-portfolio-publisher/my-portfolio/directus-token",
     "collections": {
       "photos": "photos",
       "galleries": "galleries"

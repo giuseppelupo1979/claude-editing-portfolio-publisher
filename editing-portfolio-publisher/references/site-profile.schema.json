@@ -6,20 +6,20 @@
   "required": ["profile_version", "id", "provider", "cms_url", "site_url", "ssh", "directus", "rebuild", "verification"],
   "properties": {
     "profile_version": { "const": 1 },
-    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "maxLength": 64 },
     "provider": { "const": "directus-over-ssh" },
-    "cms_url": { "type": "string", "format": "uri", "pattern": "^https://" },
-    "site_url": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "cms_url": { "$ref": "#/$defs/httpsUrl" },
+    "site_url": { "$ref": "#/$defs/httpsUrl" },
     "ssh": {
       "type": "object",
       "required": ["host", "port", "user", "identity_file", "remote_workdir", "remote_helper"],
       "properties": {
-        "host": { "type": "string", "minLength": 1 },
+        "host": { "type": "string", "pattern": "^(?!-)[A-Za-z0-9._:-]+$", "maxLength": 253 },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
         "user": { "type": "string", "pattern": "^[a-z_][a-z0-9_-]*$" },
-        "identity_file": { "type": "string", "pattern": "^/" },
-        "remote_workdir": { "type": "string", "pattern": "^/" },
-        "remote_helper": { "type": "string", "pattern": "^/" }
+        "identity_file": { "$ref": "#/$defs/absolutePath" },
+        "remote_workdir": { "$ref": "#/$defs/absolutePathWithoutWhitespace" },
+        "remote_helper": { "$ref": "#/$defs/absolutePathWithoutWhitespace" }
       },
       "additionalProperties": false
     },
@@ -27,13 +27,20 @@
       "type": "object",
       "required": ["token_file", "collections", "fields"],
       "properties": {
-        "token_file": { "type": "string", "pattern": "^/" },
+        "token_file": {
+          "allOf": [
+            { "$ref": "#/$defs/absolutePathWithoutWhitespace" },
+            { "pattern": "/\\.config/editing-portfolio-publisher/" },
+            { "not": { "pattern": "(?:^|/)\\.\\.(?:/|$)" } }
+          ],
+          "description": "Percorso remoto confinato sotto $HOME/.config/editing-portfolio-publisher; il controllo del realpath e del proprietario avviene a runtime."
+        },
         "collections": {
           "type": "object",
           "required": ["photos", "galleries"],
           "properties": {
-            "photos": { "type": "string", "minLength": 1 },
-            "galleries": { "type": "string", "minLength": 1 }
+            "photos": { "$ref": "#/$defs/applicationCollectionIdentifier" },
+            "galleries": { "$ref": "#/$defs/applicationCollectionIdentifier" }
           },
           "additionalProperties": false
         },
@@ -41,8 +48,8 @@
           "type": "object",
           "required": ["photo", "gallery"],
           "properties": {
-            "photo": { "$ref": "#/$defs/fieldMap" },
-            "gallery": { "$ref": "#/$defs/fieldMap" }
+            "photo": { "$ref": "#/$defs/photoFieldMap" },
+            "gallery": { "$ref": "#/$defs/galleryFieldMap" }
           },
           "additionalProperties": false
         }
@@ -61,21 +68,95 @@
       "type": "object",
       "required": ["routes"],
       "properties": {
-        "routes": { "type": "array", "minItems": 1, "items": { "type": "string" } },
-        "expected_text": { "type": "string" }
+        "routes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "allOf": [
+              { "type": "string", "pattern": "^/(?!/)[^\\s?#]*$" },
+              { "not": { "pattern": "(?:^|/)\\.\\.(?:/|$)" } }
+            ]
+          }
+        },
+        "expected_text": { "type": "string", "minLength": 1 }
       },
       "additionalProperties": false
     }
   },
   "$defs": {
-    "fieldMap": {
+    "httpsUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://(?![^/?#]*@)[^\\s?#]+(?:/[^\\s?#]*)?$",
+      "maxLength": 2048
+    },
+    "absolutePath": {
+      "type": "string",
+      "pattern": "^/",
+      "minLength": 2
+    },
+    "absolutePathWithoutWhitespace": {
+      "type": "string",
+      "pattern": "^/[^\\s]*$",
+      "minLength": 2
+    },
+    "fieldIdentifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+      "maxLength": 64
+    },
+    "optionalFieldIdentifier": {
+      "oneOf": [
+        { "$ref": "#/$defs/fieldIdentifier" },
+        { "type": "null" }
+      ]
+    },
+    "applicationCollectionIdentifier": {
+      "allOf": [
+        { "$ref": "#/$defs/fieldIdentifier" },
+        { "not": { "pattern": "^[dD][iI][rR][eE][cC][tT][uU][sS]_" } }
+      ]
+    },
+    "photoFieldMap": {
       "type": "object",
-      "additionalProperties": {
-        "oneOf": [
-          { "type": "string", "minLength": 1 },
-          { "type": "null" }
-        ]
-      }
+      "required": ["image", "title_it", "title_en", "alt_it", "alt_en", "lat", "lng", "place", "sort", "published", "gallery"],
+      "properties": {
+        "image": { "$ref": "#/$defs/fieldIdentifier" },
+        "title_it": { "$ref": "#/$defs/fieldIdentifier" },
+        "title_en": { "$ref": "#/$defs/fieldIdentifier" },
+        "alt_it": { "$ref": "#/$defs/fieldIdentifier" },
+        "alt_en": { "$ref": "#/$defs/fieldIdentifier" },
+        "lat": { "$ref": "#/$defs/fieldIdentifier" },
+        "lng": { "$ref": "#/$defs/fieldIdentifier" },
+        "place": { "$ref": "#/$defs/fieldIdentifier" },
+        "sort": { "$ref": "#/$defs/fieldIdentifier" },
+        "published": { "$ref": "#/$defs/fieldIdentifier" },
+        "gallery": { "$ref": "#/$defs/fieldIdentifier" },
+        "camera": { "$ref": "#/$defs/optionalFieldIdentifier" },
+        "taken_at": { "$ref": "#/$defs/optionalFieldIdentifier" },
+        "featured": { "$ref": "#/$defs/optionalFieldIdentifier" },
+        "street": { "$ref": "#/$defs/optionalFieldIdentifier" },
+        "portrait": { "$ref": "#/$defs/optionalFieldIdentifier" },
+        "source_hash": { "$ref": "#/$defs/optionalFieldIdentifier" }
+      },
+      "additionalProperties": false
+    },
+    "galleryFieldMap": {
+      "type": "object",
+      "required": ["slug", "title_it", "title_en", "description_it", "description_en", "cover", "sort", "published"],
+      "properties": {
+        "slug": { "$ref": "#/$defs/fieldIdentifier" },
+        "title_it": { "$ref": "#/$defs/fieldIdentifier" },
+        "title_en": { "$ref": "#/$defs/fieldIdentifier" },
+        "description_it": { "$ref": "#/$defs/fieldIdentifier" },
+        "description_en": { "$ref": "#/$defs/fieldIdentifier" },
+        "cover": { "$ref": "#/$defs/fieldIdentifier" },
+        "sort": { "$ref": "#/$defs/fieldIdentifier" },
+        "published": { "$ref": "#/$defs/fieldIdentifier" },
+        "filter_flag": { "$ref": "#/$defs/optionalFieldIdentifier" }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

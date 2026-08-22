@@ -1,10 +1,23 @@
 import { createHash } from 'node:crypto';
 import { readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 
-const SECRET_KEY = /(authorization|password|secret|token|private.?key)/i;
+const SECRET_KEY = /(^authorization$|authorization_header|password|secret|token|private.?key)/i;
 const FORBIDDEN_PROFILE_KEY = /^(authorization|password|secret|token|private_key|private_key_content|passphrase)$/i;
 const PRIVATE_KEY_PEM = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/;
+const INLINE_SECRET = /(authorization\s*:\s*bearer\s+\S+|\bbearer\s+[A-Za-z0-9._~+/=-]{16,}|--?(?:token|password|secret)(?:=|\s+)\S+)/ig;
+const DIRECTUS_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const PROFILE_ID = /^[a-z0-9][a-z0-9-]*$/;
+const REQUIRED_FIELD_MAPPINGS = Object.freeze({
+  photo: Object.freeze([
+    'image', 'title_it', 'title_en', 'alt_it', 'alt_en', 'lat', 'lng', 'place',
+    'sort', 'published', 'gallery',
+  ]),
+  gallery: Object.freeze([
+    'slug', 'title_it', 'title_en', 'description_it', 'description_en', 'cover',
+    'sort', 'published',
+  ]),
+});
 
 export async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'));
@@ -20,12 +33,23 @@ export function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
 }
 
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map(
+      (key) => `${JSON.stringify(key)}:${stableJson(value[key])}`
+    ).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 export async function sha256File(path) {
   return sha256(await readFile(path));
 }
 
 export function redact(value) {
   if (Array.isArray(value)) return value.map(redact);
+  if (typeof value === 'string') return value.replace(INLINE_SECRET, '[REDACTED]');
   if (!value || typeof value !== 'object') return value;
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => [key, SECRET_KEY.test(key) ? '[REDACTED]' : redact(item)])
@@ -48,9 +72,188 @@ function requireRemoteAbsolute(value, label) {
   if (/\s/.test(value)) throw new Error(`${label} remoto non può contenere spazi`);
 }
 
+export function normalizeHttpsUrl(value, label = 'URL') {
+  const raw = requireString(value, label).trim();
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error(`${label} non è un URL valido`);
+  }
+  if (parsed.protocol !== 'https:') throw new Error(`${label} deve usare HTTPS`);
+  if (!parsed.hostname) throw new Error(`${label} deve contenere un hostname`);
+  if (parsed.username || parsed.password) throw new Error(`${label} non può contenere credenziali`);
+  if (parsed.search) throw new Error(`${label} non può contenere query string`);
+  if (parsed.hash) throw new Error(`${label} non può contenere fragment`);
+  parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
+  return `${parsed.origin}${parsed.pathname === '/' ? '' : parsed.pathname}`;
+}
+
+function requireDirectusIdentifier(value, label, { applicationCollection = false } = {}) {
+  const identifier = requireString(value, label);
+  if (!DIRECTUS_IDENTIFIER.test(identifier) || identifier.length > 64) {
+    throw new Error(`${label} non è un identifier Directus valido`);
+  }
+  if (identifier === '*') throw new Error(`${label} non può essere wildcard`);
+  if (applicationCollection && identifier.toLowerCase().startsWith('directus_')) {
+    throw new Error(`${label} non può usare il namespace directus_`);
+  }
+  return identifier;
+}
+
+function validateFieldMapping(mapping, section) {
+  if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)) {
+    throw new Error(`directus.fields.${section} mancante`);
+  }
+  for (const canonical of REQUIRED_FIELD_MAPPINGS[section]) {
+    if (mapping[canonical] === null || mapping[canonical] === undefined || mapping[canonical] === '') {
+      throw new Error(`directus.fields.${section}.${canonical} è obbligatorio e non può essere null`);
+    }
+  }
+  const seen = new Map();
+  for (const [canonical, directus] of Object.entries(mapping)) {
+    if (directus === null) continue;
+    const identifier = requireDirectusIdentifier(directus, `directus.fields.${section}.${canonical}`);
+    if (seen.has(identifier)) {
+      throw new Error(
+        `directus.fields.${section}: mapping duplicato ${identifier} per ${seen.get(identifier)} e ${canonical}`
+      );
+    }
+    seen.set(identifier, canonical);
+  }
+}
+
+export function validateServiceEmail(value) {
+  const email = requireString(value, 'service_email').trim();
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+$/.test(email)) {
+    throw new Error('service_email non è un indirizzo email valido');
+  }
+  const domain = email.slice(email.lastIndexOf('@') + 1).toLowerCase();
+  if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(domain)) {
+    throw new Error('service_email deve usare un dominio DNS valido');
+  }
+  const suffix = domain.slice(domain.lastIndexOf('.') + 1);
+  if (['example', 'invalid', 'localhost', 'test'].includes(suffix)) {
+    throw new Error(`service_email usa il dominio riservato .${suffix}`);
+  }
+  if (['example.com', 'example.net', 'example.org', 'example.edu'].includes(domain)) {
+    throw new Error(`service_email usa il dominio documentale riservato ${domain}`);
+  }
+  return email.toLowerCase();
+}
+
+export function validateProvisioningOptions(options = {}, profile) {
+  requireRemoteAbsolute(options.admin_env_file, 'admin_env_file');
+  const serviceEmail = validateServiceEmail(options.service_email);
+  if (!profile) throw new Error('profilo richiesto per validare il provisioning');
+  const cmsHost = new URL(normalizeHttpsUrl(profile.cms_url, 'cms_url')).hostname.toLowerCase();
+  const emailDomain = serviceEmail.slice(serviceEmail.lastIndexOf('@') + 1);
+  if (cmsHost !== emailDomain && !cmsHost.endsWith(`.${emailDomain}`)) {
+    throw new Error('Il dominio di service_email deve coincidere con cms_url o esserne il dominio padre');
+  }
+  return {
+    admin_env_file: options.admin_env_file,
+    service_email: serviceEmail,
+  };
+}
+
+export function provisioningPermissions(profile) {
+  validateRemoteProfile(profile);
+  const photos = profile.directus.collections.photos;
+  const galleries = profile.directus.collections.galleries;
+  const photo = profile.directus.fields.photo;
+  const gallery = profile.directus.fields.gallery;
+  const photoAll = [...new Set(['id', ...Object.values(photo).filter(Boolean)])].sort();
+  const galleryAll = [...new Set(['id', ...Object.values(gallery).filter(Boolean)])].sort();
+  // Directus applica i field permissions anche durante l'upload multipart. La
+  // whitelist esplicita copre i metadati file gestiti dal core senza ricorrere
+  // a ['*']; campi custom vanno aggiunti deliberatamente a questa specifica.
+  const directusFileCreateFields = [
+    'charset', 'created_on', 'description', 'duration', 'embed', 'filename_disk',
+    'filename_download', 'filesize', 'focal_point_divider', 'focal_point_x',
+    'focal_point_y', 'folder', 'height', 'id', 'location', 'metadata', 'modified_by',
+    'modified_on', 'storage', 'storage_divider', 'tags', 'title', 'tus_data',
+    'tus_id', 'type', 'uploaded_by', 'uploaded_on', 'width',
+  ];
+  return [
+    { collection: photos, action: 'read', fields: photoAll, permissions: {}, validation: {}, presets: null },
+    {
+      collection: photos, action: 'create', fields: photoAll.filter((field) => field !== 'id'),
+      permissions: {}, validation: { [photo.published]: { _eq: false } },
+      presets: { [photo.published]: false },
+    },
+    {
+      collection: photos, action: 'update', fields: [photo.published],
+      permissions: {}, validation: {}, presets: null,
+    },
+    { collection: galleries, action: 'read', fields: galleryAll, permissions: {}, validation: {}, presets: null },
+    {
+      collection: galleries, action: 'create', fields: galleryAll.filter((field) => field !== 'id'),
+      permissions: {}, validation: { [gallery.published]: { _eq: false } },
+      presets: { [gallery.published]: false },
+    },
+    {
+      collection: galleries, action: 'update', fields: [gallery.cover, gallery.published].sort(),
+      permissions: {}, validation: {}, presets: null,
+    },
+    {
+      collection: 'directus_files', action: 'read', fields: ['filename_download', 'filesize', 'id'],
+      permissions: {}, validation: {}, presets: null,
+    },
+    {
+      collection: 'directus_files', action: 'create', fields: directusFileCreateFields,
+      permissions: {}, validation: {}, presets: null,
+    },
+    {
+      collection: 'directus_fields', action: 'read', fields: ['collection', 'field'],
+      permissions: { collection: { _in: [photos, galleries] } }, validation: {}, presets: null,
+    },
+  ];
+}
+
+export function provisioningIdentity(profile) {
+  validateRemoteProfile(profile);
+  const cmsUrl = normalizeHttpsUrl(profile.cms_url, 'cms_url');
+  const scope = sha256(`${profile.id}\0${cmsUrl}`).slice(0, 12);
+  const label = profile.id.slice(0, 48);
+  const marker = `editing-portfolio-publisher:${scope}`;
+  const description = `Managed by editing-portfolio-publisher; profile=${profile.id}; scope=${scope}`;
+  return {
+    scope,
+    marker,
+    description,
+    role_name: `Portfolio Publisher [${label}:${scope}]`,
+    policy_name: `Portfolio Publisher Policy [${label}:${scope}]`,
+  };
+}
+
+export function provisioningAuthorization(profile, rawOptions) {
+  const options = validateProvisioningOptions(rawOptions, profile);
+  const canonical = canonicalRemoteProfile(profile);
+  const permissionSpec = provisioningPermissions(canonical);
+  const identity = provisioningIdentity(canonical);
+  const document = {
+    authorization_version: 1,
+    profile: canonical,
+    options,
+    identity,
+    permission_spec: permissionSpec,
+  };
+  return {
+    hash: sha256(stableJson(document)),
+    options,
+    identity,
+    permission_spec: permissionSpec,
+    profile_id: canonical.id,
+    cms_url: canonical.cms_url,
+  };
+}
+
 export function assertNoEmbeddedSecrets(value, path = 'profile') {
   if (typeof value === 'string') {
     if (PRIVATE_KEY_PEM.test(value)) throw new Error(`${path} contiene una chiave privata`);
+    INLINE_SECRET.lastIndex = 0;
+    if (INLINE_SECRET.test(value)) throw new Error(`${path} contiene una credenziale inline`);
     return;
   }
   if (Array.isArray(value)) {
@@ -66,15 +269,40 @@ export function assertNoEmbeddedSecrets(value, path = 'profile') {
   }
 }
 
-export function validateProfile(profile) {
+export function validateRemoteProfile(profile) {
   assertNoEmbeddedSecrets(profile);
   if (profile?.profile_version !== 1) throw new Error('profile_version deve essere 1');
   if (profile?.provider !== 'directus-over-ssh') throw new Error('provider deve essere directus-over-ssh');
-  requireString(profile.id, 'id');
+  const profileId = requireString(profile.id, 'id');
+  if (!PROFILE_ID.test(profileId) || profileId.length > 64) throw new Error('id profilo non valido');
   for (const key of ['cms_url', 'site_url']) {
-    const value = requireString(profile[key], key);
-    if (!value.startsWith('https://')) throw new Error(`${key} deve usare HTTPS`);
+    normalizeHttpsUrl(profile[key], key);
   }
+  const tokenFile = profile.directus?.token_file;
+  requireRemoteAbsolute(tokenFile, 'directus.token_file');
+  if (basename(tokenFile) !== 'directus-token' ||
+      !tokenFile.includes('/.config/editing-portfolio-publisher/')) {
+    throw new Error('directus.token_file deve stare sotto .config/editing-portfolio-publisher e terminare in directus-token');
+  }
+  const collections = profile.directus?.collections ?? {};
+  for (const key of ['photos', 'galleries']) {
+    requireDirectusIdentifier(collections[key], `directus.collections.${key}`, { applicationCollection: true });
+  }
+  if (collections.photos === collections.galleries) throw new Error('Le collection photos e galleries devono essere distinte');
+  for (const section of ['photo', 'gallery']) {
+    validateFieldMapping(profile.directus?.fields?.[section], section);
+  }
+  if (!Array.isArray(profile.rebuild?.command) || profile.rebuild.command.length === 0) {
+    throw new Error('rebuild.command deve essere una lista non vuota');
+  }
+  if (!Array.isArray(profile.verification?.routes) || profile.verification.routes.length === 0) {
+    throw new Error('verification.routes deve essere una lista non vuota');
+  }
+  return profile;
+}
+
+export function validateProfile(profile) {
+  validateRemoteProfile(profile);
   const ssh = profile.ssh ?? {};
   for (const key of ['host', 'user']) requireString(ssh[key], `ssh.${key}`);
   if (ssh.host.startsWith('-') || ssh.user.startsWith('-')) throw new Error('host e user SSH non validi');
@@ -84,20 +312,6 @@ export function validateProfile(profile) {
   requireAbsolute(ssh.identity_file, 'ssh.identity_file');
   for (const key of ['remote_workdir', 'remote_helper']) {
     requireRemoteAbsolute(ssh[key], `ssh.${key}`);
-  }
-  requireRemoteAbsolute(profile.directus?.token_file, 'directus.token_file');
-  for (const key of ['photos', 'galleries']) {
-    requireString(profile.directus?.collections?.[key], `directus.collections.${key}`);
-  }
-  for (const section of ['photo', 'gallery']) {
-    const fields = profile.directus?.fields?.[section];
-    if (!fields || typeof fields !== 'object') throw new Error(`directus.fields.${section} mancante`);
-  }
-  if (!Array.isArray(profile.rebuild?.command) || profile.rebuild.command.length === 0) {
-    throw new Error('rebuild.command deve essere una lista non vuota');
-  }
-  if (!Array.isArray(profile.verification?.routes) || profile.verification.routes.length === 0) {
-    throw new Error('verification.routes deve essere una lista non vuota');
   }
   return profile;
 }
@@ -150,18 +364,23 @@ export function resolvePhotoPath(plan, photo) {
   return path;
 }
 
-export function canonicalProfile(profile) {
-  validateProfile(profile);
+export function canonicalRemoteProfile(profile) {
+  validateRemoteProfile(profile);
   return {
     profile_version: profile.profile_version,
     id: profile.id,
     provider: profile.provider,
-    cms_url: profile.cms_url,
-    site_url: profile.site_url,
+    cms_url: normalizeHttpsUrl(profile.cms_url, 'cms_url'),
+    site_url: normalizeHttpsUrl(profile.site_url, 'site_url'),
     directus: profile.directus,
     rebuild: profile.rebuild,
     verification: profile.verification,
   };
+}
+
+export function canonicalProfile(profile) {
+  validateProfile(profile);
+  return canonicalRemoteProfile(profile);
 }
 
 export function mapFields(source, mapping) {
@@ -194,6 +413,17 @@ export function directusQuery(path, params = {}) {
   return `${path}${suffix ? `?${suffix}` : ''}`;
 }
 
+export class DirectusHttpError extends Error {
+  constructor(message, { status, method, path, payload } = {}) {
+    super(message);
+    this.name = 'DirectusHttpError';
+    this.status = status;
+    this.method = method;
+    this.path = path;
+    this.payload = payload;
+  }
+}
+
 export class DirectusClient {
   constructor(baseUrl, token, fetchImpl = fetch) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
@@ -218,7 +448,10 @@ export class DirectusClient {
     }
     if (!response.ok) {
       const safe = redact(json);
-      throw new Error(`${method} ${path}: HTTP ${response.status} ${JSON.stringify(safe)}`);
+      throw new DirectusHttpError(
+        `${method} ${path}: HTTP ${response.status} ${JSON.stringify(safe)}`,
+        { status: response.status, method, path, payload: safe }
+      );
     }
     return json.data;
   }

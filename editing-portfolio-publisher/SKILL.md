@@ -54,6 +54,16 @@ Non è una raccomandazione: è l'ordine che impedisce i tre errori tipici (giudi
 prima di aver guardato tutto, costruire la tesi sulle foto preferite, confondere
 impressione e misura).
 
+### Percorso incrementale ed economico
+
+Usa `scripts/pipeline_incrementale.py`: preflight unico, inventario SHA-256,
+approvazione editoriale legata a un hash e rigenerazione per dipendenze. Non
+decidere a memoria cosa è ancora valido. Leggi
+`references/flusso-incrementale.md` prima di una prima esecuzione, di una ripresa o
+di una correzione. Per 3-12 foto usa una griglia sola e apri l'alta risoluzione
+solo dove la decisione richiede dettagli. L'ottimizzazione elimina ripetizioni,
+non passaggi editoriali.
+
 **F0. Controllo di integrità.** Prima di tutto, un comando solo:
 
 ```bash
@@ -132,8 +142,10 @@ e `pubblicazione-sito`) produce anche `dummy.pdf`. Prima dichiara copertina e
 sequenza in `analisi.json`, poi esegui `scripts/genera_dummy_pdf.py`. Il dummy deve
 contenere copertina, frontespizio, introduzione, statement, immagini disposte negli
 spread, didascalie, schede con descrizione completa, attrezzatura ricavata dagli
-EXIF e colophon. `triage`, `concorso` e `crescita` non inventano un libro quando la
-richiesta non prevede un edit impaginato.
+EXIF in un elenco puntato raggruppato per categoria e colophon diviso in sezioni
+tematiche. Il colophon non ripete l'elenco dell'attrezzatura. `triage`, `concorso`
+e `crescita` non inventano un libro quando la richiesta non prevede un edit
+impaginato.
 
 **Onestà sui testi.** Non inventare mai un fatto per far suonare meglio una frase:
 niente luoghi non certi, niente nomi, niente ricordi o motivazioni personali
@@ -314,92 +326,10 @@ cartella, e proporre due edit.
 
 ## Il contratto: analisi.json
 
-Tutti gli script leggono e scrivono questo file. Tu fai il lavoro di vedere e
-giudicare, gli script fanno i conti e l'impaginazione. Struttura minima:
-
-```json
-{
-  "progetto": {
-    "titolo": "Nessuno al terzo piano",
-    "sottotitolo": "opzionale",
-    "autore": "Giuseppe Lupo",
-    "modalita": "photo-editor",
-    "destinazione": "libro",
-    "fil_rouge": "una frase, non un tema generico",
-    "titoli_candidati": [
-      {"titolo": "Nessuno al terzo piano", "registro": "obliquo",
-       "motivazione": "una riga"}
-    ],
-    "introduzione": "da 250 a 500 parole, quattro movimenti",
-    "introduzione_posizione": "prima oppure dopo le tavole",
-    "registro_introduzione": "scena madre",
-    "statement": "da 60 a 120 parole, altra cosa dall'introduzione",
-    "nota_autore": "opzionale, da 80 a 150 parole",
-    "registro_didascalie": "descrittivo",
-    "copertina": "P007",
-    "copertina_motivazione": "perché questa e non l'apertura",
-    "copertina_alternative": [{"id": "P011", "motivazione": "una riga"}],
-    "cartella_thumbs": "thumbs"
-  },
-  "immagini": [
-    {
-      "id": "P007",
-      "file": "DSCF1234.jpg",
-      "thumb": "thumbs/P007_DSCF1234.jpg",
-      "titolo": "opzionale",
-      "genere": "street",
-      "voti": {"autonomia": 8, "forza": 9, "coerenza": 7,
-               "originalita": 6, "tecnica": 7, "funzione": 8},
-      "verdetto": "da portfolio",
-      "ruolo": "climax",
-      "forza_principale": "una frase",
-      "limite_principale": "una frase",
-      "cluster": ["attese"],
-      "descrizione": "obbligatoria per OGNI immagine, 30 a 100 parole: cosa si vede e cosa fa fotograficamente",
-      "didascalia": "solo per le immagini dell'edit, nel registro dichiarato",
-      "registro_tonale": "scuro",
-      "densita": "alta",
-      "cieco": "esca"
-    }
-  ],
-  "cluster": [
-    {"id": "attese", "nome": "Nessuno al terzo piano",
-     "registro_nome": "obliquo", "tesi": "una frase",
-     "immagini": ["P007", "P011"], "forza": 8}
-  ],
-  "sequenza": {
-    "spread": [["P003", null], ["P007", "P011"], [null, ["P020", "P021"]]],
-    "ritmo": "A= M+ B-",
-    "ritmo_perche": "perché questa forma e non un'altra, ricavata dal materiale",
-    "alternative": [
-      {"nome": "Alternata a picchi", "ritmo": "A= M- A+ B-", "perche": "perché l'ho scartata"}
-    ]
-  },
-  "scarti": [{"id": "P010", "motivo": "ridondante con P007, più debole sui bordi"}],
-  "gallerie": [
-    {"nome": "Nessuno al terzo piano", "ordine": ["P007", "P011"], "esca": "P007"}
-  ]
-}
-```
-
-Regole: gli `id` sono quelli assegnati da `prepara_provino.py` e non si cambiano.
-In `spread` un `null` è una pagina bianca (il respiro, e serve). Una pagina può
-contenere **più immagini**: si scrive come lista, `["P020", "P021"]`, e va usata solo
-quando le fotografie si leggono insieme e il senso nasce dall'accostamento, mai per
-far entrare più materiale. Ogni immagine citata in `sequenza`, `cluster` o `gallerie`
-deve esistere in `immagini`, e gli script si fermano se non è così.
-
-**La copertina è una scelta separata dall'apertura**, e va sempre proposta con la sua
-motivazione e due alternative. Criteri: deve funzionare fuori contesto, ridotta a
-pochi centimetri, con il titolo stampato sopra, quindi ha bisogno di una zona
-tipograficamente pulita. Quasi mai è la fotografia migliore e quasi mai è la prima
-della sequenza: l'apertura lavora dentro il libro, la copertina lavora prima che il
-libro sia aperto. Se proponi la stessa immagine per entrambe, giustifica il perché.
-
-**Il ritmo va spiegato, non solo dichiarato.** Insieme alla stringa scrivi
-`ritmo_perche` (perché questa forma è quella che il materiale consente) e almeno due
-`alternative` scartate, ciascuna con la sua stringa e il motivo del rifiuto. Una
-sequenza senza alternative dichiarate sembra l'unica possibile, e non lo è mai.
+Tutti gli script condividono `analisi.json`. Prima di crearlo o modificarlo leggi
+`references/analisi-json.md`, che contiene struttura, invarianti, colophon e regole
+per sequenza e copertina. Il file è anche il documento completo vincolato
+dall'approvazione incrementale.
 
 ## Gli script
 
@@ -407,13 +337,14 @@ Eseguili dalla cartella della skill. Tutti accettano `--help`.
 
 | Script | Cosa fa |
 |---|---|
+| `scripts/pipeline_incrementale.py preflight\|approve\|build` | hash degli originali, approvazione unica e rigenerazione selettiva |
 | `scripts/prepara_provino.py CARTELLA` | miniature, griglie di provino etichettate, `metriche.csv` e `.json`, `coppie_simili.csv`, `firma.json`. Sempre il primo passo |
 | `scripts/esporta_tabella.py analisi.json` | punteggi ponderati per tutte le destinazioni, classifiche, `tabella.xlsx` e `tabella.csv` |
 | `scripts/genera_testi.py analisi.json` | `testi.md`: titoli candidati, introduzione, statement, didascalie numerate come tavole, segnaposto aperti, referto dei controlli sui testi. Con `--solo-controllo` stampa solo il referto |
 | `scripts/genera_provino_html.py analisi.json` | provino interattivo autonomo: miniature reali, filtri, cluster, sequenza, vista a doppia pagina |
 | `scripts/genera_dummy_pdf.py analisi.json` | dummy completo: copertina, testi, spread, didascalie, descrizioni, attrezzatura EXIF e colophon |
 | `scripts/genera_payload_pubblicazione.py analisi.json` | valida il blocco `pubblicazione` e genera `publication-plan.json` |
-| `scripts/publish_directus.mjs doctor\|plan\|stage\|release` | controlla il profilo, cerca duplicati, crea bozze e pubblica con manifest idempotente |
+| `scripts/publish_directus.mjs provision\|doctor\|plan\|stage\|release` | prepara l'utente tecnico autorizzato, controlla il profilo, cerca duplicati, crea bozze e pubblica con manifest idempotente |
 
 Il provino HTML è il deliverable che l'utente riaprirà: quando lo consegni con
 SendUserFile, e c'è un desktop collegato, persistilo anche come artifact. Resta
@@ -485,47 +416,13 @@ tenuta su schermo piccolo, quante immagini per galleria, cosa non mettere online
 
 ### `pubblicazione-sito`
 Prima completa la modalità `galleria`, poi leggi
-`references/pubblicazione-sito.md`. Produci `publication-plan.json` con una sola
-galleria di destinazione per ogni nucleo editoriale, nuova o esistente, e tutte le
-foto ordinate che devono puntare a quella galleria.
-
-La configurazione del sito deve vivere fuori dalla skill, nel profilo JSON indicato
-dall'utente o in `~/.config/editing-portfolio-publisher/sites/`. Il profilo contiene
-host, porta, utente SSH, percorso della chiave privata e comandi remoti, mai il
-contenuto della chiave o una password. Il token Directus resta in un file `600` sul
-VPS e viene letto solo dall'helper remoto. Nel repository e nei deliverable non
-devono comparire password, token, chiavi private o header di autorizzazione.
-
-Prima di generare il piano, risolvi la geolocalizzazione di ogni fotografia. Usa,
-in ordine: `lat` e `lng` GPS da `metriche.json`, valori espliciti già confermati
-nell'analisi, oppure `pubblicazione.location_defaults` quando tutta la serie
-condivide lo stesso luogo. Un default è valido solo con
-`confirmed_by_user=true`; dichiaralo `approximate` se usa il centro della città o
-un punto rappresentativo invece della posizione esatta. Anche `place` è
-obbligatorio perché è l'etichetta mostrata dalla Mappa.
-
-Quando il GPS EXIF esiste ma manca il nome del luogo, prova automaticamente un
-reverse geocoding affidabile e salva il risultato con
-`location_source="reverse-geocoded"`. Se il risultato è ambiguo o il servizio non
-è disponibile, chiedi conferma all'utente invece di scegliere il primo toponimo.
-
-Se dopo questi passaggi manca `place`, `lat` o `lng`, non generare un piano
-approvabile e non eseguire `stage`. Chiedi all'utente se le fotografie condividono
-un luogo e se preferisce fornire coordinate esatte oppure autorizzare un punto
-approssimativo. Non ricavare coordinate dal nome della cartella e non presentare
-il centro di una città come posizione esatta.
-
-La pubblicazione ha quattro stati distinti:
-
-1. `doctor`: sola lettura, controlla profilo, segreto disponibile e schema CMS;
-2. `plan`: sola lettura, verifica campi, gallerie e duplicati;
-3. `stage`: dopo approvazione esplicita, carica file e record come bozze;
-4. `release`: dopo una seconda conferma di messa online, pubblica, esegue il
-   rebuild configurato e verifica le pagine live.
-
-Non usare accesso diretto al database. Non cancellare né tentare rollback
-automatici: dopo ogni creazione aggiorna il manifest, così una nuova esecuzione può
-riprendere senza duplicare. Se una fase fallisce, fermati e riporta gli ID creati.
+`references/pubblicazione-sito.md`. Nel preflight incrementale passa `--profile` e
+`--doctor-site`: configurazione, token, schema e geolocalizzazioni incomplete
+emergono prima dell'analisi finale. Produci una galleria per nucleo editoriale e
+una proposta unica con testi, luogo e coordinate. Profilo e segreti restano fuori
+dalla skill. Provisioning, `stage` e `release` conservano ciascuno la propria
+autorizzazione hashata; niente database diretto, cancellazioni o rollback
+automatici.
 
 ### `mostra`
 Edit corto, dimensioni relative di stampa (non assolute se non conosci la parete),
@@ -572,6 +469,8 @@ Leggili quando servono, non tutti insieme.
 
 | File | Quando |
 |---|---|
+| `references/flusso-incrementale.md` | prima di preflight, ripresa, correzione o rigenerazione selettiva |
+| `references/analisi-json.md` | prima di creare o modificare il contratto condiviso dagli script |
 | `references/ingestione.md` | in F1, sempre se le immagini sono in una cartella sul computer dell'utente, o se ci sono RAW o più di 50 file |
 | `references/connettori.md` | in F4, prima di dichiarare il fil rouge e prima di costruire i cluster |
 | `references/sequenza.md` | in F5, se c'è un ordine da costruire (libro, galleria, mostra) |
@@ -596,6 +495,12 @@ Leggili quando servono, non tutti insieme.
   `references/didascalie.md`.
 - Se c'è pubblicazione: proposta approvata prima di `stage`, seconda conferma prima
   di `release`, profilo esterno, controllo duplicati e manifest senza segreti.
+- Se è servito il provisioning: preflight senza SSH consegnato all'utente,
+  autorizzazione separata legata a `authorization_hash`, apply con lo stesso hash,
+  journal recuperabile e postcondizioni `doctor` più `/permissions/me` superate.
+- Se è servito il provisioning: dominio email collegato al CMS, admin env `600`
+  non symlink con `PUBLIC_URL` esatto, token confinato e vincolato, identità
+  namespaced e matrice campo per campo senza wildcard, `delete`, admin o app.
 - Se c'è pubblicazione: ogni foto ha `place`, `lat` e `lng`; la provenienza è
   dichiarata e qualsiasi default geografico risulta confermato dall'utente.
 - **Nessun giudizio nelle didascalie.** La descrizione di lavoro contiene la tua
@@ -627,6 +532,9 @@ Leggili quando servono, non tutti insieme.
   `references/sequenza.md`, sezione 11.
 - Se la modalità produce un edit ordinato, `dummy.pdf` esiste e contiene copertina,
   titolo, testi, spread, didascalie, descrizioni, attrezzatura EXIF e colophon.
+- L'attrezzatura è presentata come elenco puntato, raggruppato almeno per copertura
+  EXIF, corpi, obiettivi e focali; il colophon è distinto in sezioni tematiche e non
+  duplica l'elenco dell'attrezzatura.
 - L'elenco dell'attrezzatura usa solo `metriche.json`; dati assenti sono dichiarati
   non determinabili e non completati per deduzione.
 - Nessun trattino lungo nel testo.
@@ -641,32 +549,35 @@ classificare bene le foto, ha funzionato a metà.
 
 <!-- INIZIO INVENTARIO: generato da build-skill.sh, non modificare a mano -->
 
-**Versione 2026-08-22.4.** Oltre a questo SKILL.md, la skill è composta dai file
+**Versione 2026-08-22.11.** Oltre a questo SKILL.md, la skill è composta dai file
 qui sotto, e li vuole tutti.
 
 | File | Byte |
 |---|---|
 | `agents/openai.yaml` | 305 |
+| `references/analisi-json.md` | 3146 |
 | `references/autodiagnosi.md` | 12399 |
 | `references/canone-editing.md` | 14294 |
 | `references/connettori.md` | 11117 |
 | `references/destinazioni.md` | 8477 |
 | `references/didascalie.md` | 22132 |
+| `references/flusso-incrementale.md` | 4390 |
 | `references/ingestione.md` | 13197 |
-| `references/pubblicazione-sito.md` | 6563 |
+| `references/pubblicazione-sito.md` | 14356 |
 | `references/publication-plan.schema.json` | 3082 |
 | `references/sequenza.md` | 17235 |
-| `references/site-profile.example.json` | 1797 |
-| `references/site-profile.schema.json` | 2894 |
+| `references/site-profile.example.json` | 1810 |
+| `references/site-profile.schema.json` | 6274 |
 | `scripts/esporta_tabella.py` | 9655 |
-| `scripts/genera_dummy_pdf.py` | 20083 |
+| `scripts/genera_dummy_pdf.py` | 35463 |
 | `scripts/genera_payload_pubblicazione.py` | 10961 |
 | `scripts/genera_provino_html.py` | 41645 |
-| `scripts/genera_testi.py` | 19508 |
-| `scripts/lib/publisher-core.mjs` | 9386 |
+| `scripts/genera_testi.py` | 19807 |
+| `scripts/lib/publisher-core.mjs` | 19440 |
+| `scripts/pipeline_incrementale.py` | 24668 |
 | `scripts/prepara_provino.py` | 21094 |
-| `scripts/publish_directus.mjs` | 10411 |
-| `scripts/remote_directus.mjs` | 13116 |
+| `scripts/publish_directus.mjs` | 12229 |
+| `scripts/remote_directus.mjs` | 37271 |
 
 <!-- FINE INVENTARIO -->
 

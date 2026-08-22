@@ -10,6 +10,7 @@ import {
   fillTemplate,
   localManifestPath,
   planHash,
+  provisioningAuthorization,
   readJson,
   redact,
   resolvePhotoPath,
@@ -27,7 +28,7 @@ const CORE_HELPER = join(SCRIPT_DIR, 'lib', 'publisher-core.mjs');
 function option(args, name, required = false) {
   const index = args.indexOf(name);
   const value = index === -1 ? undefined : args[index + 1];
-  if (required && !value) throw new Error(`${name} mancante`);
+  if (required && (!value || value.startsWith('--'))) throw new Error(`${name} mancante`);
   return value;
 }
 
@@ -135,6 +136,38 @@ async function doctor(profile) {
   return remoteJson(profile, command, { profile: canonicalProfile(profile) });
 }
 
+async function provision(profile, rawOptions, confirmed, confirmationHash) {
+  const authorization = provisioningAuthorization(profile, rawOptions);
+  if (!confirmed) {
+    return {
+      ok: true,
+      mode: 'local-preflight',
+      profile_id: authorization.profile_id,
+      cms_url: authorization.cms_url,
+      service_email: authorization.options.service_email,
+      admin_env_file: authorization.options.admin_env_file,
+      credential_path: profile.directus.token_file,
+      identity: authorization.identity,
+      permission_spec: authorization.permission_spec,
+      authorization_hash: authorization.hash,
+      apply: `ripetere il comando con --confirm --authorization-hash ${authorization.hash}`,
+      ssh_opened: false,
+    };
+  }
+  if (!confirmationHash || confirmationHash !== authorization.hash) {
+    throw new Error(
+      `Hash di autorizzazione non valido: eseguire di nuovo il preflight e usare --confirm --authorization-hash ${authorization.hash}`
+    );
+  }
+  await checkLocalProfile(profile);
+  const command = remoteHelperCommand(profile, 'provision', [
+    '--admin-env', authorization.options.admin_env_file,
+    '--service-email', authorization.options.service_email,
+    '--authorization-hash', authorization.hash,
+  ]);
+  return remoteJson(profile, command, { profile: canonicalProfile(profile) });
+}
+
 async function inspect(profile, planPath) {
   await checkLocalProfile(profile);
   const plan = await preparePlan(planPath, profile);
@@ -237,6 +270,7 @@ function usage() {
   return [
     'Uso:',
     '  publish_directus.mjs install-remote --profile FILE --confirm',
+    '  publish_directus.mjs provision --profile FILE --admin-env FILE --service-email EMAIL [--confirm --authorization-hash HASH]',
     '  publish_directus.mjs doctor --profile FILE',
     '  publish_directus.mjs plan --profile FILE --plan FILE',
     '  publish_directus.mjs stage --profile FILE --plan FILE --confirm [--manifest FILE]',
@@ -246,7 +280,7 @@ function usage() {
 
 async function main() {
   const [command, ...args] = process.argv.slice(2);
-  if (!command || has(args, '--help')) {
+  if (!command || command === '--help' || has(args, '--help')) {
     process.stdout.write(`${usage()}\n`);
     return;
   }
@@ -256,6 +290,11 @@ async function main() {
   let result;
   if (command === 'install-remote') {
     result = await installRemote(profile, has(args, '--confirm'));
+  } else if (command === 'provision') {
+    result = await provision(profile, {
+      admin_env_file: option(args, '--admin-env', true),
+      service_email: option(args, '--service-email', true),
+    }, has(args, '--confirm'), option(args, '--authorization-hash'));
   } else if (command === 'doctor') {
     result = await doctor(profile);
   } else if (command === 'plan') {

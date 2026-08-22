@@ -70,7 +70,7 @@ VPS: job temporaneo + remote_directus.mjs
         │
         │  token letto solo sul VPS
         ▼
-Directus API: files, photos, galleries
+Directus API: permissions, fields, files, photos, galleries
         │
         ▼
 rebuild del sito statico
@@ -83,14 +83,20 @@ Il client locale non legge mai il token Directus. Conosce soltanto i parametri S
 e il percorso remoto del file token. L’helper sul VPS usa le API Directus e salva
 un manifest dopo ogni creazione.
 
+Prima della trasmissione il client riduce il profilo alla forma canonica necessaria
+sul VPS, omettendo l’intera sezione `ssh`. Il client e l’helper applicano validatori
+distinti: il primo richiede i dati di trasporto, il secondo soltanto la configurazione
+runtime di Directus, rebuild e verifica.
+
 ### Componenti
 
 | Componente | Dove vive | Responsabilità |
 |---|---|---|
 | `SKILL.md` | repository e installazione locale | regole editoriali e confini di autorizzazione |
+| `pipeline_incrementale.py` | locale | inventario SHA-256, approvazione unica e grafo di rigenerazione |
 | `genera_payload_pubblicazione.py` | locale | trasforma il blocco `pubblicazione` nel piano validato |
-| `publish_directus.mjs` | locale | SSH, SCP, controlli locali, staging, release e verifica live |
-| `remote_directus.mjs` | VPS | schema Directus, duplicati, upload, record, pubblicazione e rebuild |
+| `publish_directus.mjs` | locale | SSH, SCP, provisioning autorizzato, controlli locali, staging, release e verifica live |
+| `remote_directus.mjs` | VPS | provisioning tecnico, schema Directus, duplicati, upload, record, pubblicazione e rebuild |
 | profilo JSON | solo computer dell’utente | host, porta, chiave, schema e comandi |
 | token Directus | solo VPS | autenticazione API con permessi minimi |
 | `publication-manifest.json` | locale e VPS | ID, hash e stato di ogni operazione |
@@ -122,23 +128,29 @@ pip install rawpy pillow-heif
 - accesso HTTPS al CMS Directus;
 - spazio temporaneo sufficiente per le fotografie;
 - helper remoto installato dalla skill;
-- file token Directus con permessi `600`;
+- token e binding sotto `$HOME/.config/editing-portfolio-publisher/`, directory
+  `700`, file regolari `600`, nessun symlink;
 - comando di rebuild non interattivo e con timeout ragionevole.
 
 ### Directus
 
-È richiesto un utente tecnico o una policy dedicata con:
+È richiesto un utente tecnico con ruolo e policy namespaced per profilo e CMS. La
+matrice `collection/action/fields` è calcolata dal mapping, mostrata dal preflight
+e legata all'approvazione tramite hash. In sintesi comprende:
 
-- lettura dello schema delle collezioni interessate;
-- lettura, creazione e aggiornamento dei file;
-- lettura, creazione e aggiornamento di fotografie e gallerie;
+- `directus_fields`: lettura dello schema;
+- `directus_files`: lettura e creazione;
+- collezione fotografie: lettura, creazione e aggiornamento;
+- collezione gallerie: lettura, creazione e aggiornamento;
 - nessun permesso di cancellazione;
+- `admin_access=false` e `app_access=false`;
 - nessun accesso diretto al database;
 - nessun ruolo amministratore generale.
 
 Le collezioni e i campi possono avere nomi diversi: vengono tradotti dal profilo
-JSON. Sono obbligatori i concetti di immagine, titolo, alt text, ordinamento, stato
-pubblicato e relazione con la galleria.
+JSON. Non sono ammessi wildcard di collezione. I mapping essenziali non possono
+essere `null`; la matrice campo per campo è definita in
+`references/pubblicazione-sito.md`.
 
 ## 4. Installazione locale
 
@@ -191,7 +203,7 @@ Struttura completa:
     "remote_helper": "/home/publisher/.local/share/editing-portfolio-publisher/remote_directus.mjs"
   },
   "directus": {
-    "token_file": "/home/publisher/.config/editing-portfolio-publisher/directus-token",
+    "token_file": "/home/publisher/.config/editing-portfolio-publisher/mio-portfolio/directus-token",
     "collections": {
       "photos": "photos",
       "galleries": "galleries"
@@ -256,7 +268,7 @@ Struttura completa:
 | `ssh.identity_file` | percorso assoluto della chiave privata, non il suo contenuto |
 | `ssh.remote_workdir` | cartella dei job e dell’helper sul VPS |
 | `ssh.remote_helper` | percorso assoluto dello script remoto |
-| `directus.token_file` | file remoto che contiene solo il token API |
+| `directus.token_file` | file remoto confinato sotto `$HOME/.config/editing-portfolio-publisher/`; il binding lo lega a profilo, CMS, utente e policy |
 | `collections` | nomi reali delle collezioni Directus |
 | `fields.photo` | mappa campo canonico → campo Directus delle fotografie |
 | `fields.gallery` | mappa campo canonico → campo Directus delle gallerie |
@@ -264,8 +276,14 @@ Struttura completa:
 | `verification.routes` | URL relativi da controllare dopo la release |
 | `expected_text` | testo atteso nell’HTML, con placeholder della galleria |
 
-Un campo opzionale non presente nel CMS può essere impostato a `null`. I percorsi
-locali e remoti devono essere assoluti e senza spazi.
+I mapping essenziali non possono essere omessi né impostati a `null`. Per le foto
+sono `image`, `title_it`, `title_en`, `alt_it`, `alt_en`, `lat`, `lng`, `place`,
+`sort`, `published` e `gallery`; per le gallerie sono `slug`, `title_it`,
+`title_en`, `description_it`, `description_en`, `cover`, `sort` e `published`.
+Solo i mapping opzionali dichiarati dallo schema possono essere `null`. Collezioni
+e campi sono identificatori applicativi, senza wildcard; le collezioni configurate
+non possono usare il prefisso riservato `directus_`. I percorsi locali e remoti
+devono essere assoluti e quelli remoti non possono contenere spazi.
 
 ### Cosa non deve stare nel JSON
 
@@ -289,17 +307,6 @@ deve funzionare in modalità non interattiva e con `BatchMode=yes`.
 È preferibile limitare la chiave all’utente che può leggere il token, gestire la
 cartella di lavoro ed eseguire il rebuild, senza privilegi generali di root.
 
-### Token Directus
-
-1. Crea un utente tecnico Directus.
-2. Assegna solo i permessi elencati nei requisiti.
-3. Genera un token statico dedicato.
-4. Sul VPS crea il file indicato da `directus.token_file`.
-5. Scrivi il token senza lasciarlo nella cronologia della shell.
-6. Imposta proprietario corretto e permessi `600`.
-
-L’helper rifiuta un token file leggibile da gruppo o altri utenti.
-
 ### Installazione dell’helper remoto
 
 Operazione una tantum:
@@ -316,6 +323,56 @@ Questo comando crea la cartella remota e copia soltanto:
 - `lib/publisher-core.mjs`.
 
 Non trasferisce token, password o chiavi.
+
+### Provisioning dell'utente tecnico e del token
+
+È un'operazione una tantum, separata dallo staging e dalla release. Il primo
+comando è un preflight locale: non apre SSH e non esegue mutazioni.
+
+```bash
+node editing-portfolio-publisher/scripts/publish_directus.mjs provision \
+  --profile ~/.config/editing-portfolio-publisher/sites/mio-portfolio.json \
+  --admin-env /percorso/remoto/directus/.env \
+  --service-email portfolio-publisher@tuodominio.it
+```
+
+L'output descrive CMS, email, identità namespaced, percorsi e matrice esatta
+`collection/action/fields`, poi produce `authorization_hash`. Fai approvare
+separatamente quel documento e applica gli stessi argomenti con l'hash approvato:
+
+```bash
+node editing-portfolio-publisher/scripts/publish_directus.mjs provision \
+  --profile ~/.config/editing-portfolio-publisher/sites/mio-portfolio.json \
+  --admin-env /percorso/remoto/directus/.env \
+  --service-email portfolio-publisher@tuodominio.it \
+  --confirm \
+  --authorization-hash HASH_APPROVATO
+```
+
+L'apply ricalcola il documento prima di SSH. Se profilo, email, CMS, mapping,
+percorso amministrativo o permessi sono cambiati, l'hash non coincide e serve una
+nuova approvazione.
+
+L'email deve usare un dominio DNS reale collegato all'hostname di `cms_url`;
+localhost, IP, TLD riservati e domini `example.com`, `example.net`, `example.org`
+o `example.edu` sono rifiutati localmente. Il file indicato da `--admin-env`
+resta sul VPS: deve essere un file regolare, non symlink, con permessi esatti
+`600`, e il suo
+`PUBLIC_URL` deve coincidere esattamente con il `cms_url` canonico.
+
+Ruolo e policy sono namespaced deterministicamente per `profile.id` e CMS. La
+policy consente solo la matrice riportata dal preflight, senza wildcard di
+collezione, `delete`, `admin_access` o `app_access`. Il token e il relativo binding
+restano sotto `$HOME/.config/editing-portfolio-publisher/`, con directory `700`,
+file `600`, proprietario verificato e nessun symlink. Il binding associa il token
+a profilo, CMS, utente tecnico e policy, per impedirne il riuso trasversale.
+
+Ogni creazione o riconciliazione viene annotata in un journal atomico privo di
+segreti. Una nuova esecuzione con lo stesso hash riprende in modo idempotente; non
+esegue cancellazioni automatiche. Prima di concludere, l'apply verifica policy e
+relazioni di accesso, esegue `doctor` e confronta i permessi effettivi restituiti
+da `/permissions/me` con la matrice autorizzata. La specifica completa, inclusi i
+campi per ogni azione, è in `references/pubblicazione-sito.md`.
 
 ## 7. Workflow di analisi
 
@@ -334,6 +391,36 @@ La pipeline editoriale resta quella dell’upstream:
 Una nuova galleria non viene creata per ogni fotografia. Una serie editoriale ha
 una sola galleria e tutte le fotografie selezionate puntano allo stesso ID.
 
+### Preflight e modalità incrementale
+
+Il percorso normale passa dal wrapper incrementale:
+
+```bash
+python3 editing-portfolio-publisher/scripts/pipeline_incrementale.py \
+  preflight /percorso/fotografie
+```
+
+Se è prevista la pubblicazione, lo stesso preflight controlla anche profilo,
+credenziali remote e schema, in sola lettura:
+
+```bash
+python3 editing-portfolio-publisher/scripts/pipeline_incrementale.py \
+  preflight /percorso/fotografie \
+  --profile ~/.config/editing-portfolio-publisher/sites/mio-sito.json \
+  --doctor-site
+```
+
+La prima `build --confirm` calcola metriche, miniature e griglia una volta. Dopo
+che `analisi.json` riunisce titolo, sequenza, testi, luoghi, coordinate, gallerie
+e proposta di pubblicazione, `approve` produce un hash unico da far approvare
+all'utente. Una seconda `build --confirm` genera soltanto gli elaborati scaduti.
+Gli hash sono SHA-256 dei contenuti; `--rehash` forza la rilettura completa.
+
+Il grafo è a campi: un cambio del colophon invalida soltanto il dummy, un cambio
+del blocco di pubblicazione soltanto il piano Directus. Una modifica agli originali
+invalida ingestione e approvazione editoriale. La procedura completa è in
+`references/flusso-incrementale.md`.
+
 ## 8. Deliverable
 
 Nella cartella `_analisi` vengono prodotti:
@@ -350,6 +437,7 @@ Nella cartella `_analisi` vengono prodotti:
 | `tabella.csv/.xlsx` | punteggi per libro, mostra, web e concorso |
 | `provino.html` | provino interattivo autonomo con immagini incorporate |
 | `dummy.pdf` | anteprima completa del libro basata sulla sequenza proposta |
+| `dummy.qa.json` | pagine, sezioni, overflow e sole pagine cambiate da ricontrollare |
 | `publication-plan.json` | piano CMS approvabile, senza credenziali |
 | `publication-manifest.json` | ID e hash prodotti dallo staging |
 
@@ -365,7 +453,8 @@ Comando:
 python3 editing-portfolio-publisher/scripts/genera_dummy_pdf.py \
   /percorso/_analisi/analisi.json \
   --metriche /percorso/_analisi/metriche.json \
-  -o /percorso/_analisi/dummy.pdf
+  -o /percorso/_analisi/dummy.pdf \
+  --qa-strict
 ```
 
 Il dummy contiene:
@@ -379,16 +468,22 @@ Il dummy contiene:
 - statement e nota dell’autore;
 - indice delle tavole;
 - scheda completa di ogni fotografia con file, titolo, descrizione e didascalia;
-- elenco dell’attrezzatura ricavato da `metriche.json`;
-- corpi, ottiche, focali reali ed equivalenti presenti negli EXIF;
-- copertura EXIF, cioè quante tavole possiedono dati leggibili;
-- colophon con formato, data del dummy e avvertenza sulle miniature.
+- elenco puntato dell’attrezzatura ricavato da `metriche.json`, raggruppato per
+  copertura EXIF, corpi macchina, obiettivi e focali;
+- conteggio delle tavole per ogni corpo, ottica e focale presente negli EXIF;
+- colophon distinto in sezioni tematiche per progetto, edizione, specifiche
+  tecniche, fonti e limiti, senza ripetere l’elenco dell’attrezzatura.
 
 L’attrezzatura non viene dedotta visivamente. Se gli EXIF sono assenti, il PDF
 dichiara che il dato non è determinabile.
 
 Il dummy serve a giudicare sequenza, respiro e relazione fra testo e immagini. Le
 miniature non sono adatte alla stampa definitiva.
+
+Ogni generazione scrive `dummy.qa.json`. Alla prima revisione si controlla tutto
+il PDF; nelle successive si aprono solo le `changed_pdf_pages`, purché
+`qa_ok=true`. Il manifest distingue le pagine del file dagli equivalenti fogli
+fisici del libro: ogni pagina PDF rappresenta uno spread e vale due pagine fisiche.
 
 ## 10. Blocco pubblicazione in analisi.json
 
@@ -493,6 +588,32 @@ Il piano non contiene token, password o dati SSH. Contiene solo contenuti e
 metadati destinati al CMS.
 
 ## 12. Comandi di pubblicazione
+
+### Provision
+
+Preflight locale, senza SSH né mutazioni:
+
+```bash
+node editing-portfolio-publisher/scripts/publish_directus.mjs provision \
+  --profile ~/.config/editing-portfolio-publisher/sites/mio-portfolio.json \
+  --admin-env /percorso/remoto/directus/.env \
+  --service-email portfolio-publisher@tuodominio.it
+```
+
+Stampa il documento e `authorization_hash`. Dopo l'approvazione esplicita di
+quello specifico hash, applicazione:
+
+```bash
+node editing-portfolio-publisher/scripts/publish_directus.mjs provision \
+  --profile ~/.config/editing-portfolio-publisher/sites/mio-portfolio.json \
+  --admin-env /percorso/remoto/directus/.env \
+  --service-email portfolio-publisher@tuodominio.it \
+  --confirm \
+  --authorization-hash HASH_APPROVATO
+```
+
+Applica la matrice minima, aggiorna il journal recuperabile e conclude con
+`doctor`, audit della policy/access e `/permissions/me`.
 
 ### Doctor
 
@@ -601,6 +722,17 @@ I test coprono:
 - blocco dei piani senza luogo e coordinate;
 - uso dei default geografici solo dopo conferma dell'utente;
 - stabilità dell’ID di ripresa al cambiare dei metadati di approvazione;
+- rifiuto dei domini email riservati prima di SSH;
+- legame del dominio email con l'hostname CMS;
+- preflight senza SSH e apply vincolato a `authorization_hash`;
+- verifica del file amministrativo `600`, non symlink, e del `PUBLIC_URL`;
+- confinamento e binding del token sotto la configurazione dell'utente remoto;
+- presenza di `directus_fields/read` nella matrice di provisioning;
+- assenza di `delete`, wildcard, accesso admin o app nella policy tecnica;
+- audit esatto di policy/access, `/permissions/me` e ripresa dal journal;
+- impronte SHA-256, invalidazione per campo e approvazione editoriale hashata;
+- isolamento delle modifiche a colophon e piano di pubblicazione;
+- manifest QA del dummy, pagine cambiate e controlli overflow;
 - estrazione dell’attrezzatura EXIF dalle sole tavole selezionate;
 - scansione anti-segreti del repository.
 
@@ -628,7 +760,24 @@ Dopo il merge:
 chiave privata.
 
 **Il token remoto viene rifiutato.** Controlla proprietario, permessi `600`, valore
-non vuoto e permessi della policy Directus.
+non vuoto, percorso reale sotto `$HOME/.config/editing-portfolio-publisher/`,
+binding a profilo/CMS/utente/policy e permessi della policy Directus.
+
+**Il preflight stampa un nuovo `authorization_hash`.** È cambiato almeno uno fra
+profilo, CMS, email, percorso amministrativo, mapping o matrice dei permessi. Non
+riutilizzare la vecchia approvazione: sottoponi il nuovo documento all'utente.
+
+**L'apply rifiuta `--admin-env`.** Il percorso remoto deve essere assoluto, file
+regolare non symlink, con permessi esatti `600`; il `PUBLIC_URL` contenuto deve
+coincidere con `cms_url` dopo la stessa canonicalizzazione.
+
+**Il provisioning si interrompe dopo una mutazione.** Conserva il journal e gli ID
+riportati. Riesegui gli stessi argomenti con lo stesso hash per riprendere; non
+cancellare record e non ruotare manualmente il token.
+
+**`doctor` restituisce `403` su `/fields/...`.** Alla policy tecnica manca
+`directus_fields/read`. Riesegui il provisioning autorizzato: aggiunge soltanto il
+permesso mancante e riutilizza il token valido.
 
 **Lo schema non coincide.** Correggi la mappa `directus.fields`; non rinominare i
 campi del CMS alla cieca.

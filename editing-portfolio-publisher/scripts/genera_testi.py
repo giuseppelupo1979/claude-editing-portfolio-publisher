@@ -341,6 +341,11 @@ def scrivi(dati, ids_tavole, fonte_ordine, avvisi, segnaposto, percorso):
                  "%d su %d.\n" % (len(con_desc), len(dati.get("immagini") or [])))
         for im in sorted(con_desc, key=lambda x: x["id"]):
             R.append("**%s** (`%s`)  " % (im["id"], im.get("file", "")))
+            if im.get("place"):
+                coordinate = ""
+                if im.get("lat") is not None and im.get("lng") is not None:
+                    coordinate = " (%.6f, %.6f)" % (float(im["lat"]), float(im["lng"]))
+                R.append("Luogo: %s%s.  " % (im["place"], coordinate))
             R.append("%s\n" % im["descrizione"].strip())
 
     if segnaposto:
