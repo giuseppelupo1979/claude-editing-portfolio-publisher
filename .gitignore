@@ -3,3 +3,14 @@ __pycache__/
 .DS_Store
 _analisi/
 _to_delete/
+.env
+.env.*
+*.local.json
+site-profile.json
+publication-manifest.json
+publication-job/
+secrets/
+*.pem
+*.key
+id_rsa*
+id_ed25519*

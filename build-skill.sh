@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #
-# Rigenera editing-portfolio.skill dai sorgenti e aggiorna l'inventario
+# Rigenera editing-portfolio-publisher.skill dai sorgenti e aggiorna l'inventario
 # dentro SKILL.md, sezione "Versione e integrità".
 #
 # Da eseguire dalla radice del repository, dopo ogni modifica alla skill:
 #
 #     ./build-skill.sh
 #
-# Poi: git add -A && git commit && git push
-# E infine, il passo che si dimentica: ricaricare il .skill nella app di Claude.
+# Poi: git add -A && git commit. Il push resta sempre un'azione esplicita.
+# Infine installare la cartella della skill in Codex oppure distribuire il .skill.
 #
 # Due proprietà, entrambe imparate rompendole:
 #
@@ -24,8 +24,8 @@
 
 set -euo pipefail
 
-CARTELLA="editing-portfolio"
-PACCHETTO="editing-portfolio.skill"
+CARTELLA="editing-portfolio-publisher"
+PACCHETTO="editing-portfolio-publisher.skill"
 SKILLMD="$CARTELLA/SKILL.md"
 INIZIO="<!-- INIZIO INVENTARIO: generato da build-skill.sh, non modificare a mano -->"
 FINE="<!-- FINE INVENTARIO -->"
@@ -47,8 +47,8 @@ fi
 impronta() {
   {
     grep -v '^\*\*Versione 2026' "$SKILLMD"
-    find "$CARTELLA/references" "$CARTELLA/scripts" -type f \
-         \( -name '*.md' -o -name '*.py' -o -name '*.html' \) \
+    find "$CARTELLA/agents" "$CARTELLA/references" "$CARTELLA/scripts" -type f \
+         \( -name '*.md' -o -name '*.py' -o -name '*.mjs' -o -name '*.json' -o -name '*.yaml' -o -name '*.html' \) \
       | LC_ALL=C sort | xargs cat
   } | shasum -a 256 | cut -c1-12
 }
@@ -82,8 +82,8 @@ INVENTARIO=$(mktemp)
   echo
   echo "| File | Byte |"
   echo "|---|---|"
-  find "$CARTELLA/references" "$CARTELLA/scripts" -type f \
-       \( -name '*.md' -o -name '*.py' -o -name '*.html' \) \
+  find "$CARTELLA/agents" "$CARTELLA/references" "$CARTELLA/scripts" -type f \
+       \( -name '*.md' -o -name '*.py' -o -name '*.mjs' -o -name '*.json' -o -name '*.yaml' -o -name '*.html' \) \
     | LC_ALL=C sort \
     | while read -r f; do
         printf "| \`%s\` | %s |\n" "${f#"$CARTELLA"/}" "$(wc -c < "$f" | tr -d ' ')"
@@ -128,7 +128,7 @@ fi
 
 echo
 echo "Ora, nell'ordine:"
-echo "  1. git add -A && git commit -m \"...\" && git push"
-echo "  2. ricarica $PACCHETTO nelle impostazioni delle skill della app di Claude"
+echo "  1. git add -A && git commit -m \"...\""
+echo "  2. installa la cartella $CARTELLA nella directory delle skill di Codex"
 echo
-echo "Senza il passo 2 le sessioni continuano a usare la versione precedente."
+echo "Il push del repository resta separato e richiede conferma esplicita."

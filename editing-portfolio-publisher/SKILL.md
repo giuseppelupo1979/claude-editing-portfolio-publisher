@@ -1,9 +1,9 @@
 ---
-name: editing-portfolio
-description: Analizza insiemi di fotografie (una cartella, un progetto, più immagini caricate) come singoli scatti e come corpus. Misura ogni file, fa il triage, seleziona, individua il fil rouge e i temi ricorrenti, crea cluster e gallerie tematiche con nomi proposti, e in modalità photo editor monta un libro fotografico completo (selezione, titolo, sequenza, spread, didascalie, dummy PDF). Gestisce anche edit per mostra, portfolio online e concorsi, e diagnostica i difetti ricorrenti dell'autore con piano di crescita. Usala ogni volta che le immagini sono più di due, o quando l'utente indica una cartella di foto, o parla di portfolio, progetto, serie, selezione, editing, sequenza, libro fotografico, menabò, dummy, gallerie, temi comuni, fil rouge, didascalie, quali foto tenere o scartare, in che ordine metterle, cosa hanno in comune, o vuole candidarsi a un concorso. Usala anche per "guarda queste foto e dimmi che ne pensi nell'insieme". Per la critica di una singola immagine isolata usa critica-fotografica.
+name: editing-portfolio-publisher
+description: Analizza insiemi di fotografie come singoli scatti e come corpus, seleziona, costruisce sequenze, libri e gallerie, e può preparare e pubblicare una selezione su un portfolio Directus configurato localmente. Usala quando l'utente indica una cartella di almeno tre foto e chiede editing, portfolio, gallerie, testi o pubblicazione sul proprio sito. La pubblicazione richiede sempre una proposta editoriale approvata, configurazione esterna alla skill e conferma separata prima della messa online. Per una sola immagine usa critica-fotografica.
 ---
 
-# Editing e portfolio
+# Editing, portfolio e pubblicazione
 
 Scopo: fare su un insieme di fotografie il lavoro che un fotografo non riesce a
 fare sul proprio archivio, perché ricorda la fatica dello scatto invece di vedere
@@ -29,7 +29,7 @@ Se `critica-fotografica` è installata, non duplicare il suo lavoro: quando serv
 le tredici sezioni su 2 o 3 immagini chiave, invocala e integra il risultato. Se
 non è installata, dichiaralo e fornisci una versione compatta della scheda.
 
-## Le sette modalità
+## Le otto modalità
 
 Dichiara sempre in apertura quale modalità stai usando e su quante immagini. Se
 l'utente non la specifica, deducila e dillo in una riga.
@@ -43,6 +43,7 @@ l'utente non la specifica, deducila e dillo in una riga.
 | `mostra` | stampa e parete | edit corto, dimensioni relative, allestimento, distanze |
 | `concorso` | premi, bandi, candidature | 5 o 10 immagini, statement, lettura da giuria |
 | `crescita` | l'utente vuole capire come migliorare, o confronta con un lavoro precedente | firma d'autore, difetti ricorrenti, piano e commissione |
+| `pubblicazione-sito` | dopo l'edit l'utente vuole portare una selezione su un portfolio Directus | proposta, piano validato, staging in bozza e release solo dopo conferma |
 
 Le modalità si sommano: un `photo-editor` include sempre la lettura d'insieme, e
 chiude sempre con la sezione di crescita.
@@ -56,13 +57,13 @@ impressione e misura).
 **F0. Controllo di integrità.** Prima di tutto, un comando solo:
 
 ```bash
-ls scripts/ references/
+ls agents/ scripts/ references/
 ```
 
 Confrontalo con l'inventario in fondo a questo file, sezione *Versione e
 integrità*. Se manca anche un solo file, **stai lavorando su una copia vecchia o
 incompleta della skill**: fermati, dillo all'utente in una riga citando cosa manca,
-e chiedi di reinstallare il pacchetto `editing-portfolio.skill` dal repo. Non
+e chiedi di reinstallare `editing-portfolio-publisher` dal repo. Non
 proseguire ricostruendo a mano il pezzo mancante: produrresti un lavoro che sembra
 completo e non lo è, e l'utente se ne accorgerebbe solo alla consegna.
 
@@ -99,6 +100,10 @@ firma d'autore, difetti ricorrenti. Qui leggi `references/connettori.md`.
 
 **F5. Costruzione.** Selezione, ordine, gallerie, secondo la destinazione. Leggi
 `references/destinazioni.md` e, se c'è una sequenza, `references/sequenza.md`.
+Se l'utente chiede di pubblicare sul proprio sito, leggi
+`references/pubblicazione-sito.md` prima di chiudere F5. La pubblicazione estende
+la modalità `galleria`: non sostituisce l'edit e non autorizza da sola mutazioni
+esterne.
 
 Poi i testi, che non sono un accessorio e non si saltano mai. Leggi
 `references/didascalie.md` e scrivi, in quest'ordine:
@@ -122,6 +127,14 @@ passa i controlli automatici (lunghezze, ripetizioni fra didascalie vicine, agge
 valutativi, formule descrittive, lista nera, segnaposto aperti). Sistema quello che
 segnala, o dichiara perché lo ignori.
 
+Ogni modalità che produce un edit ordinato (`insieme`, `photo-editor`, `galleria`
+e `pubblicazione-sito`) produce anche `dummy.pdf`. Prima dichiara copertina e
+sequenza in `analisi.json`, poi esegui `scripts/genera_dummy_pdf.py`. Il dummy deve
+contenere copertina, frontespizio, introduzione, statement, immagini disposte negli
+spread, didascalie, schede con descrizione completa, attrezzatura ricavata dagli
+EXIF e colophon. `triage`, `concorso` e `crescita` non inventano un libro quando la
+richiesta non prevede un edit impaginato.
+
 **Onestà sui testi.** Non inventare mai un fatto per far suonare meglio una frase:
 niente luoghi non certi, niente nomi, niente ricordi o motivazioni personali
 attribuiti all'autore. Quello che non sai va scritto come segnaposto `[luogo]`,
@@ -136,6 +149,10 @@ script, poi fai **entrambe** queste cose, non una sola:
    dispositivo;
 2. **scrivili sul disco dell'utente, dentro la cartella che contiene le immagini**,
    in una sottocartella `_analisi`.
+
+Fra i deliverable dell'edit deve esserci `dummy.pdf`, insieme ad `analisi.json`,
+`testi.md`, `provino.html` e alle tabelle. Il PDF usa le miniature per valutare
+impaginazione e ritmo, non sostituisce i file di stampa.
 
 Il secondo passo non è opzionale e non si chiede il permesso: chi ti ha indicato una
 cartella di fotografie si aspetta di trovare il lavoro accanto alle fotografie, non
@@ -314,6 +331,7 @@ giudicare, gli script fanno i conti e l'impaginazione. Struttura minima:
        "motivazione": "una riga"}
     ],
     "introduzione": "da 250 a 500 parole, quattro movimenti",
+    "introduzione_posizione": "prima oppure dopo le tavole",
     "registro_introduzione": "scena madre",
     "statement": "da 60 a 120 parole, altra cosa dall'introduzione",
     "nota_autore": "opzionale, da 80 a 150 parole",
@@ -393,7 +411,9 @@ Eseguili dalla cartella della skill. Tutti accettano `--help`.
 | `scripts/esporta_tabella.py analisi.json` | punteggi ponderati per tutte le destinazioni, classifiche, `tabella.xlsx` e `tabella.csv` |
 | `scripts/genera_testi.py analisi.json` | `testi.md`: titoli candidati, introduzione, statement, didascalie numerate come tavole, segnaposto aperti, referto dei controlli sui testi. Con `--solo-controllo` stampa solo il referto |
 | `scripts/genera_provino_html.py analisi.json` | provino interattivo autonomo: miniature reali, filtri, cluster, sequenza, vista a doppia pagina |
-| `scripts/genera_dummy_pdf.py analisi.json` | dummy del libro in PDF: copertina, spread affiancati, didascalie, colophon |
+| `scripts/genera_dummy_pdf.py analisi.json` | dummy completo: copertina, testi, spread, didascalie, descrizioni, attrezzatura EXIF e colophon |
+| `scripts/genera_payload_pubblicazione.py analisi.json` | valida il blocco `pubblicazione` e genera `publication-plan.json` |
+| `scripts/publish_directus.mjs doctor\|plan\|stage\|release` | controlla il profilo, cerca duplicati, crea bozze e pubblica con manifest idempotente |
 
 Il provino HTML è il deliverable che l'utente riaprirà: quando lo consegni con
 SendUserFile, e c'è un desktop collegato, persistilo anche come artifact. Resta
@@ -432,8 +452,10 @@ ridondanti. Nessun report critico, nessun voto sui sei assi. Massimo 900 parole.
 12. Testi: tre titoli candidati, introduzione alla raccolta, statement, e la
     didascalia di ogni immagine che entra nell'edit o nelle gallerie. Consegnati in
     `testi.md`, con i segnaposto elencati.
-13. Piano di crescita: tre esercizi e una commissione (vedi `references/autodiagnosi.md`).
-14. La singola priorità: una frase, la cosa che da sola cambierebbe più questo lavoro.
+13. Dummy editoriale: copertina, sequenza a spread, tutti i testi destinati al
+    libro, schede descrittive, attrezzatura EXIF e colophon.
+14. Piano di crescita: tre esercizi e una commissione (vedi `references/autodiagnosi.md`).
+15. La singola priorità: una frase, la cosa che da sola cambierebbe più questo lavoro.
 
 ### `photo-editor`
 Tutto `insieme`, e poi: numero di pagine dichiarato prima della selezione, titolo
@@ -460,6 +482,31 @@ finale di tavole, o entrambe.
 ### `galleria`
 Cluster con nome definitivo, ordine di scorrimento, immagine esca e perché,
 tenuta su schermo piccolo, quante immagini per galleria, cosa non mettere online.
+
+### `pubblicazione-sito`
+Prima completa la modalità `galleria`, poi leggi
+`references/pubblicazione-sito.md`. Produci `publication-plan.json` con una sola
+galleria di destinazione per ogni nucleo editoriale, nuova o esistente, e tutte le
+foto ordinate che devono puntare a quella galleria.
+
+La configurazione del sito deve vivere fuori dalla skill, nel profilo JSON indicato
+dall'utente o in `~/.config/editing-portfolio-publisher/sites/`. Il profilo contiene
+host, porta, utente SSH, percorso della chiave privata e comandi remoti, mai il
+contenuto della chiave o una password. Il token Directus resta in un file `600` sul
+VPS e viene letto solo dall'helper remoto. Nel repository e nei deliverable non
+devono comparire password, token, chiavi private o header di autorizzazione.
+
+La pubblicazione ha quattro stati distinti:
+
+1. `doctor`: sola lettura, controlla profilo, segreto disponibile e schema CMS;
+2. `plan`: sola lettura, verifica campi, gallerie e duplicati;
+3. `stage`: dopo approvazione esplicita, carica file e record come bozze;
+4. `release`: dopo una seconda conferma di messa online, pubblica, esegue il
+   rebuild configurato e verifica le pagine live.
+
+Non usare accesso diretto al database. Non cancellare né tentare rollback
+automatici: dopo ogni creazione aggiorna il manifest, così una nuova esecuzione può
+riprendere senza duplicare. Se una fase fallisce, fermati e riporta gli ID creati.
 
 ### `mostra`
 Edit corto, dimensioni relative di stampa (non assolute se non conosci la parete),
@@ -511,6 +558,7 @@ Leggili quando servono, non tutti insieme.
 | `references/sequenza.md` | in F5, se c'è un ordine da costruire (libro, galleria, mostra) |
 | `references/didascalie.md` | in F5, prima di scrivere titoli, didascalie e statement |
 | `references/destinazioni.md` | in F5, per i numeri e i criteri della destinazione dichiarata |
+| `references/pubblicazione-sito.md` | quando una selezione deve essere preparata, caricata o pubblicata su Directus |
 | `references/canone-editing.md` | prima di nominare un fotografo o un libro di riferimento |
 | `references/autodiagnosi.md` | per firma d'autore, difetti ricorrenti, piano di crescita, confronto longitudinale |
 
@@ -527,6 +575,8 @@ Leggili quando servono, non tutti insieme.
 - I difetti ricorrenti hanno una frequenza numerica, non un aggettivo.
 - Ogni cluster e ogni galleria hanno un nome che non compare nella lista nera di
   `references/didascalie.md`.
+- Se c'è pubblicazione: proposta approvata prima di `stage`, seconda conferma prima
+  di `release`, profilo esterno, controllo duplicati e manifest senza segreti.
 - **Nessun giudizio nelle didascalie.** La descrizione di lavoro contiene la tua
   valutazione ed è per l'autore; la didascalia va stampata sotto la fotografia e il
   lettore non deve trovarci dentro il tuo verdetto. Se una didascalia contiene "la
@@ -554,6 +604,10 @@ Leggili quando servono, non tutti insieme.
   tre alternative scartate con stringa e motivo.
 - Ogni pagina con più di una immagine regge le cinque condizioni di
   `references/sequenza.md`, sezione 11.
+- Se la modalità produce un edit ordinato, `dummy.pdf` esiste e contiene copertina,
+  titolo, testi, spread, didascalie, descrizioni, attrezzatura EXIF e colophon.
+- L'elenco dell'attrezzatura usa solo `metriche.json`; dati assenti sono dichiarati
+  non determinabili e non completati per deduzione.
 - Nessun trattino lungo nel testo.
 
 **Criterio di successo:** il report funziona se dice all'autore almeno una cosa sul
@@ -566,27 +620,36 @@ classificare bene le foto, ha funzionato a metà.
 
 <!-- INIZIO INVENTARIO: generato da build-skill.sh, non modificare a mano -->
 
-**Versione 2026-08-20.2.** Oltre a questo SKILL.md, la skill è composta dai file
+**Versione 2026-08-22.2.** Oltre a questo SKILL.md, la skill è composta dai file
 qui sotto, e li vuole tutti.
 
 | File | Byte |
 |---|---|
+| `agents/openai.yaml` | 305 |
 | `references/autodiagnosi.md` | 12399 |
 | `references/canone-editing.md` | 14294 |
 | `references/connettori.md` | 11117 |
 | `references/destinazioni.md` | 8477 |
 | `references/didascalie.md` | 22132 |
 | `references/ingestione.md` | 13050 |
+| `references/pubblicazione-sito.md` | 5229 |
+| `references/publication-plan.schema.json` | 2839 |
 | `references/sequenza.md` | 17235 |
+| `references/site-profile.example.json` | 1797 |
+| `references/site-profile.schema.json` | 2894 |
 | `scripts/esporta_tabella.py` | 9655 |
-| `scripts/genera_dummy_pdf.py` | 13975 |
+| `scripts/genera_dummy_pdf.py` | 20083 |
+| `scripts/genera_payload_pubblicazione.py` | 6651 |
 | `scripts/genera_provino_html.py` | 41645 |
 | `scripts/genera_testi.py` | 19508 |
+| `scripts/lib/publisher-core.mjs` | 9050 |
 | `scripts/prepara_provino.py` | 20132 |
+| `scripts/publish_directus.mjs` | 10411 |
+| `scripts/remote_directus.mjs` | 13116 |
 
 <!-- FINE INVENTARIO -->
 
-**Come si usa.** In F0 esegui `ls scripts/ references/` e confronta con l'elenco
+**Come si usa.** In F0 esegui `ls agents/ scripts/ references/` e confronta con l'elenco
 qui sopra. Se combacia, la skill è integra e puoi lavorare. Se manca un file, la
 copia è vecchia: fermati e chiedi all'utente di reinstallare il pacchetto.
 
@@ -611,14 +674,14 @@ Chi modifica questa skill esegue, dalla radice del repository:
 ./build-skill.sh
 ```
 
-Lo script rigenera `editing-portfolio.skill`, aggiorna l'inventario qui sopra e
+Lo script rigenera `editing-portfolio-publisher.skill`, aggiorna l'inventario qui sopra e
 stampa cosa è cambiato. Poi si committa **sia** i sorgenti **sia** il pacchetto:
 
 ```bash
-git add -A && git commit -m "..." && git push
+git add -A && git commit -m "..."
 ```
 
-**Terzo passo, quello che si dimentica:** aprire le impostazioni delle skill nella
-app di Claude e ricaricare `editing-portfolio.skill`. Finché non lo fai, le
+Il push resta un'azione separata ed esplicita. **Passo che si dimentica:** installare o aggiornare la cartella
+`editing-portfolio-publisher` nel proprio ambiente skill. Finché non lo fai, le
 sessioni continuano a usare la versione precedente, e il repository aggiornato non
 serve a niente.

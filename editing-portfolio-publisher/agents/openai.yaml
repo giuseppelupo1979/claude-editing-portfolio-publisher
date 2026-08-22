@@ -1,0 +1,6 @@
+interface:
+  display_name: "Editing Portfolio Publisher"
+  short_description: "Editing fotografico e pubblicazione CMS"
+  default_prompt: "Usa $editing-portfolio-publisher per analizzare questa cartella, proporre una selezione e prepararla per il mio portfolio."
+policy:
+  allow_implicit_invocation: true

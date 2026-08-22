@@ -1,0 +1,64 @@
+{
+  "profile_version": 1,
+  "id": "my-portfolio",
+  "provider": "directus-over-ssh",
+  "cms_url": "https://cms.example.com",
+  "site_url": "https://portfolio.example.com",
+  "ssh": {
+    "host": "portfolio.example.com",
+    "port": 22,
+    "user": "publisher",
+    "identity_file": "/Users/your-name/.ssh/portfolio_publisher_ed25519",
+    "remote_workdir": "/home/publisher/.local/share/editing-portfolio-publisher",
+    "remote_helper": "/home/publisher/.local/share/editing-portfolio-publisher/remote_directus.mjs"
+  },
+  "directus": {
+    "token_file": "/home/publisher/.config/editing-portfolio-publisher/directus-token",
+    "collections": {
+      "photos": "photos",
+      "galleries": "galleries"
+    },
+    "fields": {
+      "photo": {
+        "image": "image",
+        "title_it": "title_it",
+        "title_en": "title_en",
+        "alt_it": "alt_it",
+        "alt_en": "alt_en",
+        "lat": "lat",
+        "lng": "lng",
+        "place": "place",
+        "camera": "camera",
+        "taken_at": "taken_at",
+        "sort": "sort",
+        "featured": "featured",
+        "published": "published",
+        "gallery": "gallery",
+        "street": "street",
+        "portrait": "portrait",
+        "source_hash": null
+      },
+      "gallery": {
+        "slug": "slug",
+        "title_it": "title_it",
+        "title_en": "title_en",
+        "description_it": "description_it",
+        "description_en": "description_en",
+        "cover": "cover",
+        "sort": "sort",
+        "published": "published",
+        "filter_flag": "filter_flag"
+      }
+    }
+  },
+  "rebuild": {
+    "command": ["bash", "/home/publisher/portfolio-rebuild.sh"]
+  },
+  "verification": {
+    "routes": [
+      "/portfolio/{slug}/",
+      "/en/portfolio/{slug}/"
+    ],
+    "expected_text": "{title_it}"
+  }
+}

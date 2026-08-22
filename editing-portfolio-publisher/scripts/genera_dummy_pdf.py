@@ -2,9 +2,9 @@
 """
 genera_dummy_pdf.py: costruisce il dummy (menabo') del libro in PDF.
 
-Legge analisi.json e le miniature e impagina, una pagina PDF per ogni doppia pagina
-del libro, cosi' come il lettore la vedra':
-  copertina, frontespizio, gli spread nell'ordine, lo statement, l'indice delle tavole.
+Legge analisi.json, metriche.json e le miniature e impagina una pagina PDF per ogni
+doppia pagina del libro, cosi' come il lettore la vedra': copertina, frontespizio,
+introduzione, spread, statement, schede delle tavole, attrezzatura EXIF e colophon.
 
 Le pagine bianche dichiarate come null nella sequenza restano bianche: sono parte del
 progetto, non un errore.
@@ -12,6 +12,7 @@ progetto, non un errore.
 Uso:
   python3 genera_dummy_pdf.py analisi.json [-o dummy.pdf] [--radice CARTELLA]
         [--pagina 21x26] [--dpi 150] [--senza-didascalie] [--copertina P003]
+        [--metriche metriche.json]
 
 Nota: le miniature sono a bassa risoluzione, quindi il dummy serve a valutare
 sequenza, ritmo e respiro, non la qualita' di stampa.
@@ -21,6 +22,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import date
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -215,6 +217,31 @@ class Libro:
         scrivi_paragrafo(d, (x0, y), corpo, self.f_testo, largh, INCHIOSTRO, 1.62)
         self.pagine.append(tela)
 
+    def testo_lungo(self, titolo, corpo):
+        """Distribuisce un testo lungo su pagine affiancate senza tagliarlo."""
+        if not corpo:
+            return
+        prova, disegno = self.nuova()
+        _, _, largh, alt = self.riquadro("sx")
+        righe = a_capo(corpo, self.f_testo, largh, disegno)
+        passo = int(self.f_testo.size * 1.62)
+        capienza = max(8, int((alt - self.f_sotto.size * 3.2) / passo))
+        blocchi = [righe[i:i + capienza] for i in range(0, len(righe), capienza)]
+        for indice in range(0, len(blocchi), 2):
+            tela, d = self.nuova()
+            for offset, lato in enumerate(("sx", "dx")):
+                n = indice + offset
+                if n >= len(blocchi):
+                    continue
+                x0, y0, largh, _ = self.riquadro(lato)
+                etichetta = titolo if n == 0 else titolo + " (continua)"
+                d.text((x0, y0), etichetta, font=self.f_sotto, fill=INCHIOSTRO)
+                y = y0 + int(self.f_sotto.size * 2.2)
+                for riga in blocchi[n]:
+                    d.text((x0, y), riga, font=self.f_testo, fill=INCHIOSTRO)
+                    y += passo
+            self.pagine.append(tela)
+
     def indice(self, voci):
         per_pagina = max(8, int((self.ph - 2 * self.margine) / (self.f_didasc.size * 2.1)))
         blocchi = [voci[i:i + per_pagina * 2] for i in range(0, len(voci), per_pagina * 2)]
@@ -230,6 +257,34 @@ class Libro:
                 for v in gruppo:
                     y = scrivi_paragrafo(d, (x0, y), v, self.f_didasc, largh, INCHIOSTRO, 1.45)
                     y += int(self.f_didasc.size * 0.55)
+            self.pagine.append(tela)
+
+    def schede_tavole(self, voci):
+        """Una scheda per pagina: titolo, file, descrizione e didascalia."""
+        for inizio in range(0, len(voci), 2):
+            tela, d = self.nuova()
+            for offset, lato in enumerate(("sx", "dx")):
+                indice = inizio + offset
+                if indice >= len(voci):
+                    continue
+                voce = voci[indice]
+                x0, y0, largh, _ = self.riquadro(lato)
+                titolo = "%d. %s" % (indice + 1, voce.get("titolo") or voce.get("file") or voce["id"])
+                y = scrivi_paragrafo(d, (x0, y0), titolo, self.f_sotto,
+                                     largh, INCHIOSTRO, 1.3)
+                if voce.get("file"):
+                    d.text((x0, y + int(self.ph * 0.008)), voce["file"],
+                           font=self.f_mini, fill=TENUE)
+                    y += int(self.f_mini.size * 2.2)
+                if voce.get("descrizione"):
+                    y = scrivi_paragrafo(d, (x0, y), voce["descrizione"], self.f_testo,
+                                         largh, INCHIOSTRO, 1.52)
+                    y += int(self.ph * 0.018)
+                if voce.get("didascalia"):
+                    d.text((x0, y), "Didascalia", font=self.f_mini, fill=TENUE)
+                    y += int(self.f_mini.size * 1.6)
+                    scrivi_paragrafo(d, (x0, y), voce["didascalia"], self.f_didasc,
+                                     largh, TENUE, 1.45)
             self.pagine.append(tela)
 
     def salva(self, percorso):
@@ -250,6 +305,8 @@ def main():
     ap.add_argument("--con-descrizioni", action="store_true",
                     help="usa la descrizione al posto della didascalia: menabo' di lavoro, non da stampa")
     ap.add_argument("--copertina", default=None, help="id dell'immagine di copertina")
+    ap.add_argument("--metriche", default=None,
+                    help="metriche.json per ricavare l'attrezzatura EXIF")
     args = ap.parse_args()
 
     percorso = os.path.abspath(os.path.expanduser(args.analisi))
@@ -281,21 +338,28 @@ def main():
         rel = per_id[id_cop].get("thumb") or per_id[id_cop].get("file")
         percorso_cop = rel if os.path.isabs(rel) else os.path.join(base, rel)
 
-    libro = Libro(lw, lh, args.dpi)
-    libro.copertina(prog, percorso_cop)
-    libro.frontespizio(prog)
-    for n, coppia in enumerate(sequenza, 1):
-        sx, dx = (list(coppia) + [None, None])[:2]
-        libro.spread(sx, dx, per_id, base, not args.senza_didascalie, n, args.con_descrizioni)
-    if prog.get("statement"):
-        libro.testo_pagina("Nota", prog["statement"])
-    if prog.get("fil_rouge"):
-        libro.testo_pagina("Filo", prog["fil_rouge"])
     usate = []
     for c in sequenza:
         for pag in c:
             if pag:
                 usate.extend(pag if isinstance(pag, list) else [pag])
+
+    libro = Libro(lw, lh, args.dpi)
+    libro.copertina(prog, percorso_cop)
+    libro.frontespizio(prog)
+    introduzione = prog.get("introduzione")
+    posizione_intro = prog.get("introduzione_posizione", "prima")
+    if introduzione and posizione_intro == "prima":
+        libro.testo_lungo("Introduzione", introduzione)
+    for n, coppia in enumerate(sequenza, 1):
+        sx, dx = (list(coppia) + [None, None])[:2]
+        libro.spread(sx, dx, per_id, base, not args.senza_didascalie, n, args.con_descrizioni)
+    if introduzione and posizione_intro != "prima":
+        libro.testo_lungo("Introduzione", introduzione)
+    if prog.get("statement"):
+        libro.testo_lungo("Statement", prog["statement"])
+    if prog.get("nota_autore"):
+        libro.testo_lungo("Nota dell'autore", prog["nota_autore"])
     voci = []
     for k, ident in enumerate(usate, 1):
         im = per_id.get(ident, {})
@@ -306,10 +370,30 @@ def main():
     if voci:
         libro.indice(voci)
 
+    tavole = [per_id[ident] for ident in usate if ident in per_id]
+    if tavole:
+        libro.schede_tavole(tavole)
+
+    metriche_path = os.path.abspath(os.path.expanduser(
+        args.metriche or os.path.join(os.path.dirname(percorso), "metriche.json")))
+    attrezzatura = attrezzatura_exif(metriche_path, tavole)
+    libro.testo_lungo("Attrezzatura", attrezzatura)
+
+    colophon = []
+    if prog.get("titolo"):
+        colophon.append("Titolo: " + prog["titolo"] + ".")
+    if prog.get("autore"):
+        colophon.append("Autore: " + prog["autore"] + ".")
+    colophon.append("Dummy editoriale generato il %s." % date.today().isoformat())
+    colophon.append("Formato pagina: %sx%s cm; risoluzione dummy: %s dpi." % (lw, lh, args.dpi))
+    colophon.append(attrezzatura)
+    colophon.append("Le immagini del dummy possono provenire da miniature e non sono file di stampa.")
+    libro.testo_lungo("Colophon", " ".join(colophon))
+
     out = os.path.abspath(os.path.expanduser(
         args.uscita or os.path.join(os.path.dirname(percorso) or ".", "dummy.pdf")))
     libro.salva(out)
-    pagine_libro = len(sequenza) * 2
+    pagine_libro = len(libro.pagine) * 2
     print("Scritto: %s" % out)
     print("Spread impaginati: %d, pagine interne: %d" % (len(sequenza), pagine_libro))
     if pagine_libro % 4:
@@ -319,6 +403,37 @@ def main():
     print("Pagine bianche dichiarate: %d" % bianche)
     if bianche == 0:
         print("Nessun respiro: verifica se e' voluto.")
+
+
+def attrezzatura_exif(metriche_path, tavole):
+    """Raccoglie solo i dati EXIF presenti per le immagini effettivamente usate."""
+    if not os.path.exists(metriche_path):
+        return "Attrezzatura non determinabile: metriche.json non disponibile."
+    try:
+        with open(metriche_path, encoding="utf-8") as fh:
+            documento = json.load(fh)
+    except Exception as exc:
+        return "Attrezzatura non determinabile: metriche.json non leggibile (%s)." % exc
+
+    righe = documento.get("immagini") if isinstance(documento, dict) else documento
+    if not isinstance(righe, list):
+        return "Attrezzatura non determinabile: struttura di metriche.json non valida."
+    per_file = {r.get("file"): r for r in righe if isinstance(r, dict) and r.get("file")}
+    selezionate = [per_file.get(t.get("file")) for t in tavole]
+    selezionate = [r for r in selezionate if r]
+    corpi = sorted({r.get("corpo") for r in selezionate if r.get("corpo")})
+    ottiche = sorted({r.get("ottica") for r in selezionate if r.get("ottica")})
+    focali = sorted({r.get("focale") for r in selezionate if isinstance(r.get("focale"), (int, float))})
+    equivalenti = sorted({r.get("focale_equivalente") for r in selezionate
+                          if isinstance(r.get("focale_equivalente"), (int, float))})
+    parti = ["Dati EXIF disponibili per %d tavole su %d." % (len(selezionate), len(tavole))]
+    parti.append("Corpi: %s." % (", ".join(corpi) if corpi else "non determinabili"))
+    parti.append("Ottiche: %s." % (", ".join(ottiche) if ottiche else "non determinabili"))
+    parti.append("Focali registrate: %s." % (
+        ", ".join("%g mm" % valore for valore in focali) if focali else "non determinabili"))
+    parti.append("Focali equivalenti: %s." % (
+        ", ".join("%g mm" % valore for valore in equivalenti) if equivalenti else "non determinabili"))
+    return " ".join(parti)
 
 
 if __name__ == "__main__":
