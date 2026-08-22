@@ -42,6 +42,9 @@ def analysis():
                     "title_en": "The Threshold",
                     "alt_it": "Una figura davanti a una porta.",
                     "alt_en": "A figure in front of a door.",
+                    "place": "Napoli, Italia",
+                    "lat": 40.8518,
+                    "lng": 14.2681,
                 }
             ],
         },
@@ -55,6 +58,8 @@ class PublicationPayloadTest(unittest.TestCase):
         self.assertFalse(plan["approval"]["approved"])
         self.assertEqual(plan["photos"][0]["file"], "foto 01.jpg")
         self.assertEqual(plan["photos"][0]["caption"], "La porta trattiene la figura.")
+        self.assertEqual(plan["photos"][0]["location_source"], "explicit")
+        self.assertEqual(plan["photos"][0]["location_precision"], "exact")
 
     def test_requires_all_bilingual_text(self):
         data = analysis()
@@ -66,6 +71,60 @@ class PublicationPayloadTest(unittest.TestCase):
         data = analysis()
         data["pubblicazione"]["gallery"]["cover_file"] = "altra.jpg"
         with self.assertRaisesRegex(ValueError, "cover_file"):
+            PAYLOAD.build_plan(data, "test-site", Path("/tmp/photos"))
+
+    def test_combines_exif_coordinates_with_confirmed_project_place(self):
+        data = analysis()
+        photo = data["pubblicazione"]["photos"][0]
+        for key in ("place", "lat", "lng"):
+            del photo[key]
+        data["pubblicazione"]["location_defaults"] = {
+            "place": "Napoli, Italia",
+            "precision": "approximate",
+            "confirmed_by_user": True,
+        }
+        metrics = {
+            "immagini": [
+                {
+                    "id": "P001",
+                    "file": "foto 01.jpg",
+                    "lat": 40.85216,
+                    "lng": 14.26811,
+                    "corpo": "RICOH GR III",
+                    "ottica": "GR LENS 18.3mm F2.8",
+                }
+            ]
+        }
+        plan = PAYLOAD.build_plan(data, "test-site", Path("/tmp/photos"), metrics)
+        published = plan["photos"][0]
+        self.assertEqual(published["place"], "Napoli, Italia")
+        self.assertEqual(published["lat"], 40.85216)
+        self.assertEqual(published["lng"], 14.26811)
+        self.assertEqual(published["location_source"], "mixed")
+        self.assertEqual(published["location_precision"], "approximate")
+        self.assertIn("RICOH GR III", published["camera"])
+
+    def test_missing_location_stops_before_publication(self):
+        data = analysis()
+        photo = data["pubblicazione"]["photos"][0]
+        for key in ("place", "lat", "lng"):
+            del photo[key]
+        with self.assertRaisesRegex(ValueError, "chiedi all'utente"):
+            PAYLOAD.build_plan(data, "test-site", Path("/tmp/photos"))
+
+    def test_unconfirmed_project_default_is_not_used(self):
+        data = analysis()
+        photo = data["pubblicazione"]["photos"][0]
+        for key in ("place", "lat", "lng"):
+            del photo[key]
+        data["pubblicazione"]["location_defaults"] = {
+            "place": "Napoli, Italia",
+            "lat": 40.8518,
+            "lng": 14.2681,
+            "precision": "approximate",
+            "confirmed_by_user": False,
+        }
+        with self.assertRaisesRegex(ValueError, "confirmed_by_user=true"):
             PAYLOAD.build_plan(data, "test-site", Path("/tmp/photos"))
 
 

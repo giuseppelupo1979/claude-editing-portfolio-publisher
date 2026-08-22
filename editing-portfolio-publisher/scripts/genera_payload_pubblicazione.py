@@ -52,6 +52,83 @@ def image_lookup(analysis: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return lookup
 
 
+def metrics_lookup(metrics: Any) -> dict[str, dict[str, Any]]:
+    rows = metrics.get("immagini") if isinstance(metrics, dict) else metrics
+    if not isinstance(rows, list):
+        return {}
+    lookup: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for key in (row.get("id"), row.get("file")):
+            if key:
+                lookup[str(key)] = row
+    return lookup
+
+
+def first_value(*candidates: tuple[Any, str]) -> tuple[Any, str | None]:
+    for value, source in candidates:
+        if value is not None and value != "":
+            return value, source
+    return None, None
+
+
+def camera_from_metric(metric: dict[str, Any]) -> str | None:
+    values = [str(metric.get(key)).strip() for key in ("corpo", "ottica") if metric.get(key)]
+    return " - ".join(values) or None
+
+
+def resolve_location(
+    raw: dict[str, Any],
+    image: dict[str, Any],
+    metric: dict[str, Any],
+    defaults: dict[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    confirmed_defaults = defaults if defaults.get("confirmed_by_user") is True else {}
+    values: dict[str, Any] = {}
+    sources: set[str] = set()
+    raw_source = raw.get("location_source") or "explicit"
+    analysis_source = image.get("location_source") or "analysis"
+    for key in ("place", "lat", "lng"):
+        value, source = first_value(
+            (raw.get(key), raw_source),
+            (image.get(key), analysis_source),
+            (metric.get(key), "exif"),
+            (confirmed_defaults.get(key), "project-default"),
+        )
+        values[key] = value
+        if source:
+            sources.add(source)
+
+    missing = [key for key in ("place", "lat", "lng") if values[key] in (None, "")]
+    if missing:
+        return values, missing
+    try:
+        values["lat"] = float(values["lat"])
+        values["lng"] = float(values["lng"])
+    except (TypeError, ValueError):
+        return values, ["lat/lng non numeriche"]
+    if not -90 <= values["lat"] <= 90:
+        missing.append("lat fuori intervallo")
+    if not -180 <= values["lng"] <= 180:
+        missing.append("lng fuori intervallo")
+    if missing:
+        return values, missing
+
+    precision = raw.get("location_precision")
+    if not precision and "project-default" in sources:
+        precision = confirmed_defaults.get("precision", "approximate")
+    precision = precision or "exact"
+    if precision not in {"exact", "approximate"}:
+        return values, ["location_precision non valida"]
+    values["location_precision"] = precision
+    allowed_sources = {"explicit", "analysis", "exif", "reverse-geocoded", "project-default"}
+    if not sources.issubset(allowed_sources):
+        return values, ["location_source non valida"]
+    values["location_source"] = next(iter(sources)) if len(sources) == 1 else "mixed"
+    return values, []
+
+
 def normalize_gallery(raw: dict[str, Any]) -> dict[str, Any]:
     gallery = {key: nonempty(raw.get(key), f"gallery.{key}") for key in REQUIRED_GALLERY_TEXT}
     action = raw.get("action", "create")
@@ -83,18 +160,23 @@ def normalize_gallery(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_photos(
-    raw_photos: Any, images: dict[str, dict[str, Any]]
+    raw_photos: Any,
+    images: dict[str, dict[str, Any]],
+    metrics: dict[str, dict[str, Any]],
+    location_defaults: dict[str, Any],
 ) -> list[dict[str, Any]]:
     if not isinstance(raw_photos, list) or not raw_photos:
         fail("pubblicazione.photos deve essere una lista non vuota")
 
     result = []
     seen_files: set[str] = set()
+    missing_locations: list[str] = []
     for index, raw in enumerate(raw_photos, start=1):
         if not isinstance(raw, dict):
             fail(f"pubblicazione.photos[{index}] non è un oggetto")
         image_id = raw.get("id")
         image = images.get(str(image_id)) if image_id is not None else None
+        image = image or {}
         file_name = raw.get("file") or (image or {}).get("file")
         file_name = nonempty(file_name, f"photos[{index}].file")
         if file_name in seen_files:
@@ -109,35 +191,53 @@ def normalize_photos(
             fail(f"Ordine non valido per {file_name}")
         for key in REQUIRED_PHOTO_TEXT:
             photo[key] = nonempty(raw.get(key), f"{file_name}.{key}")
-        for key in ("place", "lat", "lng", "camera", "taken_at"):
-            photo[key] = raw.get(key)
+        metric = metrics.get(str(image_id)) or metrics.get(file_name) or {}
+        location, missing = resolve_location(raw, image, metric, location_defaults)
+        photo.update(location)
+        if missing:
+            missing_locations.append(f"{file_name} ({', '.join(missing)})")
+        photo["camera"] = raw.get("camera") or image.get("camera") or camera_from_metric(metric)
+        photo["taken_at"] = raw.get("taken_at") or image.get("taken_at") or metric.get("data")
         for key in ("featured", "street", "portrait"):
             photo[key] = bool(raw.get(key, False))
-        photo["description_working"] = raw.get("description_working") or (image or {}).get("descrizione")
-        photo["caption"] = raw.get("caption") or (image or {}).get("didascalia")
+        photo["description_working"] = raw.get("description_working") or image.get("descrizione")
+        photo["caption"] = raw.get("caption") or image.get("didascalia")
         result.append(photo)
 
     result.sort(key=lambda photo: photo["order"])
     orders = [photo["order"] for photo in result]
     if len(set(orders)) != len(orders):
         fail("Gli ordini delle foto devono essere univoci")
+    if missing_locations:
+        details = "; ".join(missing_locations)
+        fail(
+            "Geolocalizzazione incompleta: " + details + ". "
+            "Prima della pubblicazione chiedi all'utente luogo e coordinate. "
+            "Se tutta la serie condivide il luogo, compila pubblicazione.location_defaults "
+            "con place, lat, lng, precision e confirmed_by_user=true."
+        )
     return result
 
 
 def build_plan(
-    analysis: dict[str, Any], profile_id: str, source_dir: Path
+    analysis: dict[str, Any], profile_id: str, source_dir: Path, metrics: Any = None
 ) -> dict[str, Any]:
     block = publication_block(analysis)
     gallery_raw = block.get("gallery")
     if not isinstance(gallery_raw, dict):
         fail("pubblicazione.gallery deve essere un oggetto")
     gallery = normalize_gallery(gallery_raw)
-    photos = normalize_photos(block.get("photos"), image_lookup(analysis))
+    defaults = block.get("location_defaults") or {}
+    if not isinstance(defaults, dict):
+        fail("pubblicazione.location_defaults deve essere un oggetto")
+    photos = normalize_photos(
+        block.get("photos"), image_lookup(analysis), metrics_lookup(metrics), defaults
+    )
     if gallery["cover_file"] not in {photo["file"] for photo in photos}:
         fail("gallery.cover_file deve appartenere alle foto selezionate")
 
     return {
-        "plan_version": 1,
+        "plan_version": 2,
         "profile_id": profile_id,
         "source_dir": str(source_dir.expanduser().resolve()),
         "gallery": gallery,
@@ -157,6 +257,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("analysis", type=Path, help="Percorso di analisi.json")
     parser.add_argument("--profile-id", required=True, help="ID del profilo sito locale")
     parser.add_argument("--source-dir", type=Path, help="Cartella che contiene gli originali")
+    parser.add_argument("--metriche", type=Path, help="metriche.json con EXIF e coordinate GPS")
     parser.add_argument("-o", "--output", type=Path, help="File JSON di destinazione")
     return parser.parse_args()
 
@@ -166,8 +267,10 @@ def main() -> int:
     analysis_path = args.analysis.expanduser().resolve()
     analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
     source_dir = args.source_dir or analysis_path.parent.parent
+    metrics_path = (args.metriche or analysis_path.with_name("metriche.json")).expanduser().resolve()
+    metrics = json.loads(metrics_path.read_text(encoding="utf-8")) if metrics_path.exists() else None
     output = args.output or analysis_path.with_name("publication-plan.json")
-    plan = build_plan(analysis, args.profile_id, source_dir)
+    plan = build_plan(analysis, args.profile_id, source_dir, metrics)
     output.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Scritto: {output}")
     print(f"Galleria: {plan['gallery']['slug']} ({len(plan['photos'])} foto)")

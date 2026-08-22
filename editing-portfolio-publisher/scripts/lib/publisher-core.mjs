@@ -103,7 +103,7 @@ export function validateProfile(profile) {
 }
 
 export function validatePlan(plan, profileId) {
-  if (plan?.plan_version !== 1) throw new Error('plan_version deve essere 1');
+  if (plan?.plan_version !== 2) throw new Error('plan_version deve essere 2');
   if (plan.profile_id !== profileId) throw new Error('profile_id del piano non coincide con il profilo');
   requireAbsolute(plan.source_dir, 'source_dir');
   const gallery = plan.gallery ?? {};
@@ -121,16 +121,22 @@ export function validatePlan(plan, profileId) {
       throw new Error(`Ordine non valido o duplicato: ${photo.order}`);
     }
     orders.add(photo.order);
-    for (const key of ['file', 'title_it', 'title_en', 'alt_it', 'alt_en']) {
+    for (const key of ['file', 'title_it', 'title_en', 'alt_it', 'alt_en', 'place', 'location_source']) {
       requireString(photo[key], `photo.${key}`);
     }
     if (files.has(photo.file)) throw new Error(`File duplicato nel piano: ${photo.file}`);
     files.add(photo.file);
-    if (photo.lat != null && (typeof photo.lat !== 'number' || photo.lat < -90 || photo.lat > 90)) {
+    if (typeof photo.lat !== 'number' || photo.lat < -90 || photo.lat > 90) {
       throw new Error(`Latitudine non valida: ${photo.file}`);
     }
-    if (photo.lng != null && (typeof photo.lng !== 'number' || photo.lng < -180 || photo.lng > 180)) {
+    if (typeof photo.lng !== 'number' || photo.lng < -180 || photo.lng > 180) {
       throw new Error(`Longitudine non valida: ${photo.file}`);
+    }
+    if (!['exact', 'approximate'].includes(photo.location_precision)) {
+      throw new Error(`Precisione geografica non valida: ${photo.file}`);
+    }
+    if (!['explicit', 'analysis', 'exif', 'reverse-geocoded', 'project-default', 'mixed'].includes(photo.location_source)) {
+      throw new Error(`Origine geografica non valida: ${photo.file}`);
     }
   }
   if (!files.has(gallery.cover_file)) throw new Error('La cover non appartiene alla selezione');

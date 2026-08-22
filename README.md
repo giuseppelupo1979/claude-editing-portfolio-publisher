@@ -398,6 +398,13 @@ Prima di generare il piano, l’agente aggiunge ad `analisi.json`:
 {
   "pubblicazione": {
     "source_dir": "/percorso/assoluto/alle/foto",
+    "location_defaults": {
+      "place": "Napoli, Italia",
+      "lat": 40.8518,
+      "lng": 14.2681,
+      "precision": "approximate",
+      "confirmed_by_user": true
+    },
     "gallery": {
       "action": "create",
       "existing_id": null,
@@ -418,9 +425,6 @@ Prima di generare il piano, l’agente aggiunge ad `analisi.json`:
         "title_en": "Title",
         "alt_it": "Descrizione accessibile di ciò che si vede.",
         "alt_en": "Accessible description of what is visible.",
-        "place": null,
-        "lat": null,
-        "lng": null,
         "camera": "Corpo e ottica da EXIF",
         "taken_at": "2026-01-15",
         "featured": true,
@@ -436,7 +440,30 @@ Prima di generare il piano, l’agente aggiunge ad `analisi.json`:
 la descrizione di lavoro e la didascalia vengono recuperati da lì quando non sono
 ripetuti nel blocco.
 
+`lat` e `lng` vengono prima cercati negli EXIF di `metriche.json`. I valori della
+singola foto hanno precedenza sul default di progetto. `location_defaults` è utile
+per una serie interamente scattata nello stesso luogo, ma viene usato soltanto
+quando `confirmed_by_user` è `true`. Imposta `precision` a `approximate` per il
+centro di una città o un punto rappresentativo, e a `exact` solo quando la
+posizione è effettiva.
+
+Quando gli EXIF contengono GPS ma non un nome leggibile, l'agente tenta il reverse
+geocoding e registra `reverse-geocoded` come origine. Un risultato ambiguo non viene
+accettato automaticamente: richiede conferma dell'utente.
+
+Nel `publication-plan.json` risultante vengono aggiunti automaticamente
+`location_source` e `location_precision`, così rimane verificabile se il punto
+proviene da EXIF, da dati espliciti o dal default confermato della serie.
+
+Se mancano `place`, `lat` o `lng`, la generazione si ferma e indica le fotografie
+incomplete. In quel momento l'agente deve chiedere all'utente il luogo, oppure la
+conferma che un unico punto approssimativo sia valido per tutta la serie. Questo
+controllo impedisce di pubblicare fotografie che non comparirebbero nella Mappa.
+
 ## 11. Publication plan
+
+Il piano usa `plan_version=2`. La versione 2 rende obbligatori `place`, `lat`,
+`lng`, `location_source` e `location_precision` per ogni fotografia.
 
 Generazione:
 
@@ -445,6 +472,7 @@ python3 editing-portfolio-publisher/scripts/genera_payload_pubblicazione.py \
   /percorso/_analisi/analisi.json \
   --profile-id mio-portfolio \
   --source-dir /percorso/alle/foto \
+  --metriche /percorso/_analisi/metriche.json \
   -o /percorso/_analisi/publication-plan.json
 ```
 
@@ -569,6 +597,9 @@ I test coprono:
 - mapping dei campi Directus;
 - validazione del piano;
 - generazione del payload;
+- conversione delle coordinate GPS EXIF;
+- blocco dei piani senza luogo e coordinate;
+- uso dei default geografici solo dopo conferma dell'utente;
 - stabilità dell’ID di ripresa al cambiare dei metadati di approvazione;
 - estrazione dell’attrezzatura EXIF dalle sole tavole selezionate;
 - scansione anti-segreti del repository.

@@ -73,11 +73,38 @@ Il piano viene generato dal blocco `pubblicazione` di `analisi.json` con
 
 - `profile_id` e `source_dir`;
 - una galleria con `action` uguale a `create` o `existing`;
-- fotografie ordinate con file, titoli, alt text e metadati certi;
+- fotografie ordinate con file, titoli, alt text, luogo e coordinate certe;
 - il blocco `approval`, inizialmente con `approved=false`.
 
-Non lasciare segnaposto aperti prima di `stage`. Luogo e coordinate restano `null`
-quando non sono certi. Camera e data vengono dagli EXIF, mai dalla memoria.
+Il contratto corrente usa `plan_version=2`; la geolocalizzazione obbligatoria è la
+differenza rispetto alla versione 1.
+
+Non lasciare segnaposto aperti prima di `stage`. Camera, data e coordinate vengono
+dagli EXIF quando esistono, mai dalla memoria.
+
+## Geolocalizzazione e Mappa
+
+La pagina Mappa richiede `lat` e `lng` su ogni record `photos`; `place` è
+l'etichetta leggibile mostrata nel popup. Il generatore risolve i valori in questo
+ordine:
+
+1. metadati espliciti della fotografia nel blocco `pubblicazione`;
+2. valori già confermati nell'elemento corrispondente di `immagini`;
+3. coordinate GPS estratte in `metriche.json`;
+4. reverse geocoding delle coordinate GPS per ottenere `place`;
+5. `pubblicazione.location_defaults`, soltanto con `confirmed_by_user=true`.
+
+Il reverse geocoding è automatico solo quando produce un luogo non ambiguo. Salva
+`location_source="reverse-geocoded"`; in caso contrario chiedi conferma.
+
+Se tutta la serie è stata scattata nello stesso luogo e non ha GPS, chiedi
+all'utente una conferma unica. Registra un punto cittadino o di quartiere come
+`precision="approximate"`; usa `exact` solo per coordinate EXIF o fornite come
+posizione effettiva. Se una foto ha un luogo diverso, valorizzala singolarmente.
+
+Se `place`, `lat` o `lng` restano mancanti, `genera_payload_pubblicazione.py` deve
+fallire e indicare i file incompleti. Non aggirare il controllo modificando a mano
+il piano: anche il validatore di `stage` rifiuta coordinate assenti.
 
 ## Duplicati e idempotenza
 

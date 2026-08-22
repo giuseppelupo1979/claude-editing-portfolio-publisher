@@ -5,7 +5,7 @@
   "type": "object",
   "required": ["plan_version", "profile_id", "source_dir", "gallery", "photos", "approval"],
   "properties": {
-    "plan_version": { "const": 1 },
+    "plan_version": { "const": 2 },
     "profile_id": { "type": "string", "minLength": 1 },
     "source_dir": { "type": "string", "minLength": 1 },
     "gallery": {
@@ -30,7 +30,7 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["order", "file", "title_it", "title_en", "alt_it", "alt_en"],
+        "required": ["order", "file", "title_it", "title_en", "alt_it", "alt_en", "place", "lat", "lng", "location_source", "location_precision"],
         "properties": {
           "order": { "type": "integer", "minimum": 1 },
           "file": { "type": "string", "minLength": 1 },
@@ -38,9 +38,11 @@
           "title_en": { "type": "string", "minLength": 1 },
           "alt_it": { "type": "string", "minLength": 1 },
           "alt_en": { "type": "string", "minLength": 1 },
-          "place": { "type": ["string", "null"] },
-          "lat": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
-          "lng": { "type": ["number", "null"], "minimum": -180, "maximum": 180 },
+          "place": { "type": "string", "minLength": 1 },
+          "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+          "lng": { "type": "number", "minimum": -180, "maximum": 180 },
+          "location_source": { "enum": ["explicit", "analysis", "exif", "reverse-geocoded", "project-default", "mixed"] },
+          "location_precision": { "enum": ["exact", "approximate"] },
           "camera": { "type": ["string", "null"] },
           "taken_at": { "type": ["string", "null"] },
           "featured": { "type": "boolean" },

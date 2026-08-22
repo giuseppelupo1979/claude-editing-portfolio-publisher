@@ -30,7 +30,7 @@ from datetime import datetime
 try:
     import numpy as np
     from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
-    from PIL.ExifTags import TAGS
+    from PIL.ExifTags import GPSTAGS, TAGS
 except ImportError as e:  # pragma: no cover
     sys.exit("Servono Pillow e numpy: pip install pillow numpy --break-system-packages\n%s" % e)
 
@@ -128,6 +128,11 @@ def leggi_exif(img):
             dati[TAGS.get(tag, str(tag))] = val
     except Exception:
         pass
+    try:
+        for tag, val in raw.get_ifd(0x8825).items():
+            dati[GPSTAGS.get(tag, str(tag))] = val
+    except Exception:
+        pass
     return dati
 
 
@@ -138,6 +143,23 @@ def num(v):
         return float(v)
     except Exception:
         return None
+
+
+def coordinata_gps(valore, riferimento):
+    """Converte gradi/minuti/secondi EXIF in gradi decimali."""
+    if not isinstance(valore, (list, tuple)) or len(valore) != 3:
+        return None
+    componenti = [num(parte) for parte in valore]
+    if any(parte is None for parte in componenti):
+        return None
+    gradi, minuti, secondi = componenti
+    risultato = gradi + minuti / 60.0 + secondi / 3600.0
+    if isinstance(riferimento, bytes):
+        riferimento = riferimento.decode("ascii", "ignore")
+    ref = str(riferimento or "").upper().strip()
+    if ref in ("S", "W"):
+        risultato = -risultato
+    return round(risultato, 7)
 
 
 def estrai_exif(e):
@@ -178,6 +200,8 @@ def estrai_exif(e):
         "iso": int(iso) if iso not in (None, "") else None,
         "data": iso_data,
         "ora": ora,
+        "lat": coordinata_gps(e.get("GPSLatitude"), e.get("GPSLatitudeRef")),
+        "lng": coordinata_gps(e.get("GPSLongitude"), e.get("GPSLongitudeRef")),
     }
 
 

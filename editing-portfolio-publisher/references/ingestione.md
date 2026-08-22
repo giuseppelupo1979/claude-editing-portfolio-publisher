@@ -170,6 +170,7 @@ sopravvissute. Dichiara sempre a che livello hai guardato ogni immagine.
 | `rumore_proxy` | scarto sulle zone piatte | stima, non misura. Aumenta con la grana voluta esattamente come con il rumore indesiderato |
 | `entropia` | densità di informazione | alta significa affollata, non ricca |
 | `dhash` | impronta visiva | serve solo per le distanze fra coppie |
+| `lat`, `lng` | coordinate GPS EXIF in gradi decimali | assenti significa non determinabili, non zero. Non inventare il luogo dal nome del file |
 
 Le due che cambiano più spesso una decisione editoriale: `clip_bianchi_pc` (una
 foto con le alte luci bruciate non va in stampa grande) e `dhash` (le ridondanze

@@ -39,7 +39,7 @@ function profile() {
 
 function plan() {
   return {
-    plan_version: 1,
+    plan_version: 2,
     profile_id: 'test-site',
     source_dir: '/Users/Test User/Desktop/Napoli 2023',
     gallery: {
@@ -61,8 +61,11 @@ function plan() {
       title_en: 'The Threshold',
       alt_it: 'Una figura davanti a un ingresso.',
       alt_en: 'A figure in front of an entrance.',
+      place: 'Napoli, Italia',
       lat: 40.8518,
       lng: 14.2681,
+      location_source: 'explicit',
+      location_precision: 'exact',
     }],
     approval: { approved: false, approved_at: null, approved_by: null },
   };

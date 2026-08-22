@@ -496,6 +496,25 @@ contenuto della chiave o una password. Il token Directus resta in un file `600` 
 VPS e viene letto solo dall'helper remoto. Nel repository e nei deliverable non
 devono comparire password, token, chiavi private o header di autorizzazione.
 
+Prima di generare il piano, risolvi la geolocalizzazione di ogni fotografia. Usa,
+in ordine: `lat` e `lng` GPS da `metriche.json`, valori espliciti già confermati
+nell'analisi, oppure `pubblicazione.location_defaults` quando tutta la serie
+condivide lo stesso luogo. Un default è valido solo con
+`confirmed_by_user=true`; dichiaralo `approximate` se usa il centro della città o
+un punto rappresentativo invece della posizione esatta. Anche `place` è
+obbligatorio perché è l'etichetta mostrata dalla Mappa.
+
+Quando il GPS EXIF esiste ma manca il nome del luogo, prova automaticamente un
+reverse geocoding affidabile e salva il risultato con
+`location_source="reverse-geocoded"`. Se il risultato è ambiguo o il servizio non
+è disponibile, chiedi conferma all'utente invece di scegliere il primo toponimo.
+
+Se dopo questi passaggi manca `place`, `lat` o `lng`, non generare un piano
+approvabile e non eseguire `stage`. Chiedi all'utente se le fotografie condividono
+un luogo e se preferisce fornire coordinate esatte oppure autorizzare un punto
+approssimativo. Non ricavare coordinate dal nome della cartella e non presentare
+il centro di una città come posizione esatta.
+
 La pubblicazione ha quattro stati distinti:
 
 1. `doctor`: sola lettura, controlla profilo, segreto disponibile e schema CMS;
@@ -577,6 +596,8 @@ Leggili quando servono, non tutti insieme.
   `references/didascalie.md`.
 - Se c'è pubblicazione: proposta approvata prima di `stage`, seconda conferma prima
   di `release`, profilo esterno, controllo duplicati e manifest senza segreti.
+- Se c'è pubblicazione: ogni foto ha `place`, `lat` e `lng`; la provenienza è
+  dichiarata e qualsiasi default geografico risulta confermato dall'utente.
 - **Nessun giudizio nelle didascalie.** La descrizione di lavoro contiene la tua
   valutazione ed è per l'autore; la didascalia va stampata sotto la fotografia e il
   lettore non deve trovarci dentro il tuo verdetto. Se una didascalia contiene "la
@@ -620,7 +641,7 @@ classificare bene le foto, ha funzionato a metà.
 
 <!-- INIZIO INVENTARIO: generato da build-skill.sh, non modificare a mano -->
 
-**Versione 2026-08-22.2.** Oltre a questo SKILL.md, la skill è composta dai file
+**Versione 2026-08-22.4.** Oltre a questo SKILL.md, la skill è composta dai file
 qui sotto, e li vuole tutti.
 
 | File | Byte |
@@ -631,19 +652,19 @@ qui sotto, e li vuole tutti.
 | `references/connettori.md` | 11117 |
 | `references/destinazioni.md` | 8477 |
 | `references/didascalie.md` | 22132 |
-| `references/ingestione.md` | 13050 |
-| `references/pubblicazione-sito.md` | 5229 |
-| `references/publication-plan.schema.json` | 2839 |
+| `references/ingestione.md` | 13197 |
+| `references/pubblicazione-sito.md` | 6563 |
+| `references/publication-plan.schema.json` | 3082 |
 | `references/sequenza.md` | 17235 |
 | `references/site-profile.example.json` | 1797 |
 | `references/site-profile.schema.json` | 2894 |
 | `scripts/esporta_tabella.py` | 9655 |
 | `scripts/genera_dummy_pdf.py` | 20083 |
-| `scripts/genera_payload_pubblicazione.py` | 6651 |
+| `scripts/genera_payload_pubblicazione.py` | 10961 |
 | `scripts/genera_provino_html.py` | 41645 |
 | `scripts/genera_testi.py` | 19508 |
-| `scripts/lib/publisher-core.mjs` | 9050 |
-| `scripts/prepara_provino.py` | 20132 |
+| `scripts/lib/publisher-core.mjs` | 9386 |
+| `scripts/prepara_provino.py` | 21094 |
 | `scripts/publish_directus.mjs` | 10411 |
 | `scripts/remote_directus.mjs` | 13116 |
 
