@@ -453,7 +453,12 @@ export class DirectusClient {
         { status: response.status, method, path, payload: safe }
       );
     }
-    return json.data;
+    // Quasi tutta l'API di Directus incapsula la risposta in `data`, ma non
+    // /server/health, che segue il formato degli health check e risponde
+    // {"status":"ok"} al primo livello. Restituire json.data alla cieca faceva
+    // leggere "stato mancante" da un server che aveva appena detto di stare
+    // bene, e fermava la postcondizione del provisioning e ogni doctor.
+    return 'data' in json ? json.data : json;
   }
 }
 

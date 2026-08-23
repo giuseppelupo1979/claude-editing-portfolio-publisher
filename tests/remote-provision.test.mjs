@@ -103,7 +103,15 @@ function directusMock(siteProfile) {
     if (path === '/permissions/me' && method === 'GET') {
       return response(state.effectiveOverride ?? effectiveFromPermissions(state.permissions));
     }
-    if (path === '/server/health' && method === 'GET') return response({ status: state.healthStatus });
+    if (path === '/server/health' && method === 'GET') {
+      // Directus non incapsula questa risposta in `data`: il mock deve
+      // rispondere come il server vero, altrimenti il client puo' sbagliare a
+      // spacchettarla e i test non se ne accorgono.
+      return new Response(JSON.stringify({ status: state.healthStatus }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
     if (path === '/fields/photos' && method === 'GET') {
       const fields = ['id', ...Object.values(siteProfile.directus.fields.photo).filter(Boolean)];
       return response([...new Set(fields)]

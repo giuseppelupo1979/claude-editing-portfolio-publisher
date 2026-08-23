@@ -1,11 +1,11 @@
 {
-  "versione": "2026-08-23.3",
-  "impronta": "093d5ec41d9e",
+  "versione": "2026-08-23.4",
+  "impronta": "fe9121d389b1",
   "file": [
     {
       "path": "SKILL.md",
       "byte": 34237,
-      "sha256": "15553fb778da1969a25dca1f479be11df1308a05ab880d00473a4fee112a7ce4"
+      "sha256": "1010a8530694c5c1282666b8898eaa25b4814853f79ecda6a15f9473ca7a4666"
     },
     {
       "path": "agents/openai.yaml",
@@ -109,8 +109,8 @@
     },
     {
       "path": "scripts/lib/publisher-core.mjs",
-      "byte": 19440,
-      "sha256": "0d8e77f88bb1a4d9bd0f067e7a4c4687ffcc2f6b0edb002681b5ebbcf905053c"
+      "byte": 19845,
+      "sha256": "db9ec634ec08267550b61aa86837ac8fa3b645b0c6dc6f982b26828fada45060"
     },
     {
       "path": "scripts/pipeline_incrementale.py",
