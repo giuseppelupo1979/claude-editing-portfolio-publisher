@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -43,6 +45,62 @@ def save_json(path: Path, value: Any) -> None:
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     os.replace(temporary, path)
+
+
+SECRET_PATTERN = re.compile(
+    r"(authorization\s*:\s*bearer\s+\S+"
+    r"|\bbearer\s+[A-Za-z0-9._~+/=-]{16,}"
+    r"|--?(?:token|password|secret)(?:=|\s+)\S+)",
+    re.IGNORECASE,
+)
+
+
+def redact(text: str, limit: int = 4000) -> str:
+    """Stessa redazione che publisher-core applica lato JavaScript.
+
+    L'output di ``doctor`` finisce dentro un report JSON che viene stampato: se
+    un giorno contenesse un header o un argomento con un segreto, verrebbe letto
+    ad alta voce insieme al resto.
+    """
+    cleaned = SECRET_PATTERN.sub("[REDACTED]", text or "")
+    return cleaned if len(cleaned) <= limit else cleaned[:limit] + " [...troncato]"
+
+
+def prune_cache(cache: dict[str, Any]) -> int:
+    """Toglie dalla cache le voci di file che non esistono piu'.
+
+    Le chiavi sono percorsi assoluti: cancella un file, o sposta la cartella, e
+    la voce resta per sempre nello stato senza che nessuno la rilegga.
+    """
+    stale = [key for key in cache if not Path(key).is_file()]
+    for key in stale:
+        del cache[key]
+    return len(stale)
+
+
+def save_state(state_path: Path, state: dict[str, Any]) -> None:
+    prune_cache(state.get("file_cache") or {})
+    save_json(state_path, state)
+
+
+def check_analysis_shape(analysis: Any, path: Path) -> dict[str, Any]:
+    """Un errore di forma deve arrivare come frase, non come traceback."""
+    if not isinstance(analysis, dict):
+        raise ValueError(f"{path}: analisi.json deve contenere un oggetto JSON")
+    attese = (
+        ("immagini", list, "lista"), ("cluster", list, "lista"),
+        ("gallerie", list, "lista"), ("scarti", list, "lista"),
+        ("progetto", dict, "oggetto"), ("sequenza", dict, "oggetto"),
+        ("pubblicazione", dict, "oggetto"),
+    )
+    for key, kind, label in attese:
+        value = analysis.get(key)
+        if value is not None and not isinstance(value, kind):
+            raise ValueError(
+                f"{path}: il campo '{key}' deve essere un {label}, "
+                f"trovato {type(value).__name__}"
+            )
+    return analysis
 
 
 def file_sha(path: Path, cache: dict[str, Any], rehash: bool = False) -> str:
@@ -203,6 +261,25 @@ def script_hash(name: str, cache: dict[str, Any], rehash: bool) -> str:
     return file_sha(SCRIPT_DIR / name, cache, rehash)
 
 
+def xlsx_available() -> bool:
+    """openpyxl e' opzionale: senza, esporta_tabella.py scrive il solo CSV."""
+    return importlib.util.find_spec("openpyxl") is not None
+
+
+def table_outputs(out: Path) -> list[Path]:
+    """Il foglio Excel entra fra gli output solo quando puo' essere prodotto.
+
+    Elencarlo sempre lo renderebbe mancante su una macchina senza openpyxl, e
+    l'artefatto risulterebbe scaduto a ogni build. Ometterlo sempre, com'era
+    prima, lascia fuori dal grafo un file che la reference promette: cancellato
+    o modificato a mano, non veniva piu' rigenerato.
+    """
+    outputs = [out / "tabella.csv"]
+    if xlsx_available():
+        outputs.append(out / "tabella.xlsx")
+    return outputs
+
+
 def artifact_specs(
     source: Path,
     out: Path,
@@ -235,8 +312,9 @@ def artifact_specs(
             "outputs": [out / "testi.md"],
         },
         "table": {
-            "input": canonical_hash(common | {"data": parts["table"], "script": script_hash("esporta_tabella.py", cache, rehash)}),
-            "outputs": [out / "tabella.csv"],
+            "input": canonical_hash(common | {"data": parts["table"], "xlsx": xlsx_available(),
+                                                "script": script_hash("esporta_tabella.py", cache, rehash)}),
+            "outputs": table_outputs(out),
         },
         "preview": {
             "input": canonical_hash(common | {"data": parts["preview"], "thumbs": thumbs,
@@ -293,16 +371,28 @@ def statuses(specs: dict[str, dict[str, Any]], state: dict[str, Any], cache: dic
     return result
 
 
+def needs_publication_approval(analysis: dict[str, Any] | None) -> bool:
+    return bool(analysis) and analysis.get("pubblicazione") is not None
+
+
 def approval_document(analysis: dict[str, Any], source_hash: str, profile_id: str | None) -> dict[str, Any]:
+    """Il documento che l'utente firma prima che qualcosa esca da questa macchina.
+
+    Copre soltanto cio' che finisce sul sito. Gli elaborati locali (``testi.md``,
+    ``tabella``, ``provino.html``, ``dummy.pdf``) sono fuori di proposito: sono
+    file riscrivibili nella cartella dell'utente, e legarli alla firma costava
+    quattro giri di conversazione per correggere un refuso in una didascalia,
+    senza ridurre nessun rischio reale. Il rischio da cui la doppia conferma
+    protegge e' la mutazione su Directus, non la scrittura di un PDF.
+    """
     return {
+        "scope": "publication",
         "source_hash": source_hash,
-        "analysis_hash": canonical_hash(analysis),
         "profile_id": profile_id,
+        "publication_hash": canonical_hash(analysis.get("pubblicazione")),
         "proposal": {
-            "project": analysis.get("progetto"),
-            "sequence": analysis.get("sequenza"),
-            "galleries": analysis.get("gallerie"),
             "publication": analysis.get("pubblicazione"),
+            "galleries": analysis.get("gallerie"),
             "images": image_projection(
                 analysis,
                 ("id", "file", "titolo", "descrizione", "didascalia", "place", "lat", "lng",
@@ -324,7 +414,7 @@ def base_context(args: argparse.Namespace) -> tuple[Path, Path, Path, dict[str, 
     cache = state.setdefault("file_cache", {})
     inventory = source_inventory(source, cache, args.rehash)
     analysis_path = Path(args.analisi).expanduser().resolve() if args.analisi else out / "analisi.json"
-    analysis = load_json(analysis_path) if analysis_path.exists() else None
+    analysis = check_analysis_shape(load_json(analysis_path), analysis_path) if analysis_path.exists() else None
     return source, out, state_path, state, inventory, analysis, cache
 
 
@@ -352,7 +442,7 @@ def run_doctor(profile: str) -> dict[str, Any]:
     command = ["node", str(SCRIPT_DIR / "publish_directus.mjs"), "doctor", "--profile", profile]
     result = subprocess.run(command, text=True, capture_output=True)
     return {"ok": result.returncode == 0, "returncode": result.returncode,
-            "stdout": result.stdout.strip(), "stderr": result.stderr.strip()}
+            "stdout": redact(result.stdout.strip()), "stderr": redact(result.stderr.strip())}
 
 
 def command_preflight(args: argparse.Namespace) -> int:
@@ -367,22 +457,25 @@ def command_preflight(args: argparse.Namespace) -> int:
     if analysis is None:
         blockers.append("analisi.json non ancora disponibile: completa l'analisi e la proposta unica")
     approval = None
-    if analysis is not None:
+    if needs_publication_approval(analysis):
         document = approval_document(analysis, inventory["hash"], profile_id)
         approval_hash = canonical_hash(document)
         recorded = state.get("approval") or {}
-        approval = {"hash": approval_hash, "approved": recorded.get("hash") == approval_hash}
+        approval = {"scope": "publication", "required": True, "hash": approval_hash,
+                    "approved": recorded.get("hash") == approval_hash}
         if not approval["approved"]:
-            blockers.append("proposta editoriale non approvata o modificata")
-        if analysis.get("pubblicazione") is not None:
-            if not profile_id:
-                blockers.append("pubblicazione richiesta ma profile_id non disponibile")
-            try:
-                from genera_payload_pubblicazione import build_plan
-                metrics = load_json(out / "metriche.json") if (out / "metriche.json").exists() else None
-                build_plan(analysis, profile_id or "preflight", source, metrics)
-            except (OSError, ValueError) as error:
-                blockers.append(str(error))
+            blockers.append("proposta di pubblicazione non approvata o modificata")
+        if not profile_id:
+            blockers.append("pubblicazione richiesta ma profile_id non disponibile")
+        try:
+            from genera_payload_pubblicazione import build_plan
+            metrics = load_json(out / "metriche.json") if (out / "metriche.json").exists() else None
+            build_plan(analysis, profile_id or "preflight", source, metrics)
+        except (OSError, ValueError) as error:
+            blockers.append(str(error))
+    elif analysis is not None:
+        approval = {"scope": "publication", "required": False, "approved": None,
+                    "note": "nessun blocco pubblicazione: gli elaborati locali non richiedono firma"}
     site_doctor = None
     if args.doctor_site:
         if not args.profile:
@@ -392,7 +485,7 @@ def command_preflight(args: argparse.Namespace) -> int:
             if not site_doctor["ok"]:
                 blockers.append("doctor Directus non superato")
     state["source"] = inventory
-    save_json(state_path, state)
+    save_state(state_path, state)
     report = {
         "ok": not blockers,
         "mode": "preflight",
@@ -404,7 +497,7 @@ def command_preflight(args: argparse.Namespace) -> int:
         "site_doctor": site_doctor,
         "blockers": blockers,
         "next": "prepare" if artifact_status["ingest"]["status"] == "stale" else (
-            "approval" if approval and not approval["approved"] else "build"
+            "approval" if approval and approval.get("required") and not approval["approved"] else "build"
         ),
     }
     print(json.dumps(report, ensure_ascii=False, indent=2))
@@ -415,21 +508,28 @@ def command_approve(args: argparse.Namespace) -> int:
     _, _, state_path, state, inventory, analysis, _ = base_context(args)
     if analysis is None:
         raise ValueError("analisi.json non trovato")
+    if not needs_publication_approval(analysis):
+        raise ValueError(
+            "analisi.json non ha un blocco 'pubblicazione': non c'e' niente da autorizzare. "
+            "Gli elaborati locali (testi, tabella, provino, dummy) si rigenerano con "
+            "build --confirm senza firma."
+        )
     profile_id, issues = local_profile(args.profile)
     if issues:
         raise ValueError("; ".join(issues))
     profile_id = args.profile_id or profile_id
     document = approval_document(analysis, inventory["hash"], profile_id)
     approval_hash = canonical_hash(document)
-    response = {"ok": True, "mode": "approval-preflight", "document": document,
-                "authorization_hash": approval_hash, "recorded": False}
+    response = {"ok": True, "mode": "approval-preflight", "scope": "publication",
+                "document": document, "authorization_hash": approval_hash, "recorded": False}
     if args.confirm:
         if args.authorization_hash != approval_hash:
             raise ValueError("authorization_hash non coincide con la proposta corrente")
         state["source"] = inventory
-        state["approval"] = {"hash": approval_hash, "source_hash": inventory["hash"],
-                             "analysis_hash": document["analysis_hash"]}
-        save_json(state_path, state)
+        state["approval"] = {"scope": "publication", "hash": approval_hash,
+                             "source_hash": inventory["hash"],
+                             "publication_hash": document["publication_hash"]}
+        save_state(state_path, state)
         response["mode"] = "approval-recorded"
         response["recorded"] = True
     print(json.dumps(response, ensure_ascii=False, indent=2))
@@ -475,29 +575,34 @@ def command_build(args: argparse.Namespace) -> int:
         run_checked([sys.executable, str(SCRIPT_DIR / "prepara_provino.py"), str(source), "-o", str(out)])
         record_artifact("ingest", specs["ingest"], state, cache)
         state["source"] = inventory
-        save_json(state_path, state)
+        save_state(state_path, state)
         built.append("ingest")
 
     if analysis is None:
         print(json.dumps({"ok": True, "built": built,
-                          "next": "crea analisi.json, mostra la proposta unica e registra l'approvazione"},
+                          "next": "crea analisi.json, poi build --confirm per gli elaborati locali"},
                          ensure_ascii=False, indent=2))
         return 0
 
     if wanted == {"ingest"}:
         print(json.dumps({"ok": True, "built": built,
                           "skipped_current": ["ingest"] if not built else [],
-                          "next": "mostra la proposta editoriale unica e registra l'approvazione"},
+                          "next": "prosegui con gli elaborati locali; la firma serve solo alla pubblicazione"},
                          ensure_ascii=False, indent=2))
         return 0
 
-    document = approval_document(analysis, inventory["hash"], profile_id)
-    approval_hash = canonical_hash(document)
-    if (state.get("approval") or {}).get("hash") != approval_hash:
-        raise ValueError(
-            "proposta editoriale non approvata o cambiata: esegui approve senza --confirm, "
-            "mostra il documento all'utente, poi registra lo stesso hash"
-        )
+    # La firma vincola soltanto il piano di pubblicazione. Testi, tabella,
+    # provino e dummy restano file locali riscrivibili: rigenerarli dopo una
+    # correzione non deve costare un giro di autorizzazione.
+    if "publication" in wanted and "publication" in specs:
+        document = approval_document(analysis, inventory["hash"], profile_id)
+        approval_hash = canonical_hash(document)
+        if (state.get("approval") or {}).get("hash") != approval_hash:
+            raise ValueError(
+                "proposta di pubblicazione non approvata o cambiata: esegui approve senza "
+                "--confirm, mostra il documento all'utente, poi registra lo stesso hash. "
+                "Gli altri artefatti si costruiscono senza firma con --only texts,table,preview,dummy"
+            )
 
     # L'ingest puo' avere aggiornato metriche e thumbnail: ricalcola il grafo.
     specs = artifact_specs(source, out, inventory, analysis, profile_id, cache, True)
@@ -525,7 +630,7 @@ def command_build(args: argparse.Namespace) -> int:
             continue
         run_checked(commands[name])
         record_artifact(name, specs[name], state, cache)
-        save_json(state_path, state)
+        save_state(state_path, state)
         built.append(name)
     print(json.dumps({"ok": True, "built": built,
                       "skipped_current": sorted(name for name in wanted if name in current and current[name]["status"] == "current")},
@@ -567,6 +672,7 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError, TypeError, KeyError, AttributeError,
+            RuntimeError, subprocess.CalledProcessError) as error:
         print(f"Errore: {error}", file=sys.stderr)
         raise SystemExit(2)

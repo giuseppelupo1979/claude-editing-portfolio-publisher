@@ -1,0 +1,141 @@
+{
+  "versione": "2026-08-23.1",
+  "impronta": "1201cccac776",
+  "file": [
+    {
+      "path": "SKILL.md",
+      "byte": 34497,
+      "sha256": "6b559776a820b8b7a445ce89705e09d1f67430688cd9ae01f329eb2131cba5ba"
+    },
+    {
+      "path": "agents/openai.yaml",
+      "byte": 305,
+      "sha256": "024cf6e3b669fef15c51c6d71e939ed649dc6d708f07226c07bdb89f14308573"
+    },
+    {
+      "path": "references/analisi-json.md",
+      "byte": 3146,
+      "sha256": "04bae4dbfe2e258da997e7030873aac9fef213da015ca8026c514c67e4d5c2dc"
+    },
+    {
+      "path": "references/autodiagnosi.md",
+      "byte": 12399,
+      "sha256": "b102bd92f9185f71ca3b36ce6681ef8114ea6cff7115096846250553935f5a08"
+    },
+    {
+      "path": "references/canone-editing.md",
+      "byte": 14294,
+      "sha256": "d02ff22eb9feb26fc116683269676857dd4167449cc720785930c5a1a89c1db9"
+    },
+    {
+      "path": "references/checklist-consegna.md",
+      "byte": 5390,
+      "sha256": "bfeb2bf69a3a7a75c04e36c78657c41c4e16ff2f7a546145a329a0ad17a2a8b1"
+    },
+    {
+      "path": "references/connettori.md",
+      "byte": 11117,
+      "sha256": "b674e1743d439d29bda202b497af74e3a49731eda4295c09a1d1bedf62995993"
+    },
+    {
+      "path": "references/destinazioni.md",
+      "byte": 8477,
+      "sha256": "a8bf58a246b2b07e8b6f9bf9fc47be944c33395b24a89ccb5da85dcfe48fcefe"
+    },
+    {
+      "path": "references/didascalie.md",
+      "byte": 22132,
+      "sha256": "4917679fb94c216205162636944659876d69d67899808ab1404168074898e5b8"
+    },
+    {
+      "path": "references/flusso-incrementale.md",
+      "byte": 5324,
+      "sha256": "f86c996205d6cc31ba8e6d959cbe95293e31bf9b65dc1ae07f66a6d08e15125f"
+    },
+    {
+      "path": "references/ingestione.md",
+      "byte": 13197,
+      "sha256": "36c9108f6de84c69fe0d67a3f28f9a16ac028a4f8be224877f752c0165822a3f"
+    },
+    {
+      "path": "references/pubblicazione-sito.md",
+      "byte": 14988,
+      "sha256": "477dfbab49ebaf3d359b747ea77cbd9509f296bedca50092b58ccd06cff3fc24"
+    },
+    {
+      "path": "references/publication-plan.schema.json",
+      "byte": 3082,
+      "sha256": "afbb4b21214cbed9f534be43a0faea3577ad67454ab203bec7c1e88b3201d792"
+    },
+    {
+      "path": "references/sequenza.md",
+      "byte": 17235,
+      "sha256": "7afe975a1169dedee65bdd0c0858b3698489ed7e5a73b5a3173937cd4a90ea5b"
+    },
+    {
+      "path": "references/site-profile.example.json",
+      "byte": 1810,
+      "sha256": "7b70e9155870863731001b1653572659fc27b1aa33fa66bc1a89f17b3f2ad9ff"
+    },
+    {
+      "path": "references/site-profile.schema.json",
+      "byte": 6274,
+      "sha256": "157ae326f910b8e3e870c352d07d97b160efe4c8f61fc5ec4913dd2e025c2779"
+    },
+    {
+      "path": "scripts/esporta_tabella.py",
+      "byte": 9655,
+      "sha256": "7b47b814f1409a67bad5d25d32298a07a9665af878b89c8ddd958fcc507751e2"
+    },
+    {
+      "path": "scripts/genera_dummy_pdf.py",
+      "byte": 35463,
+      "sha256": "8331e145433933725f382eaca3afdeef1a57439df26cc0f6a2f70c9f95b28033"
+    },
+    {
+      "path": "scripts/genera_payload_pubblicazione.py",
+      "byte": 11512,
+      "sha256": "979c45f38067df353d24898cf715ce8c8f37a4bdc99b64330b40522b4e93da9e"
+    },
+    {
+      "path": "scripts/genera_provino_html.py",
+      "byte": 41645,
+      "sha256": "4d29c8b79532271b527dd835d1cd0cf4d1da77f0cadddfb018bd731f229fe7ed"
+    },
+    {
+      "path": "scripts/genera_testi.py",
+      "byte": 19807,
+      "sha256": "224764ff40e8a861f98a721f03b090ac7018c67f81f4d02f043a8c0a9253af43"
+    },
+    {
+      "path": "scripts/lib/publisher-core.mjs",
+      "byte": 19440,
+      "sha256": "0d8e77f88bb1a4d9bd0f067e7a4c4687ffcc2f6b0edb002681b5ebbcf905053c"
+    },
+    {
+      "path": "scripts/pipeline_incrementale.py",
+      "byte": 29357,
+      "sha256": "e5af27f3affbffcf474ff67637f09f7aa6e19dea99053b3d04ef9bd5255c3d1f"
+    },
+    {
+      "path": "scripts/prepara_provino.py",
+      "byte": 21094,
+      "sha256": "e909c722b558126fa568e7f9d12d0433678a84ed0d6af7f257146a279a8081f1"
+    },
+    {
+      "path": "scripts/publish_directus.mjs",
+      "byte": 12229,
+      "sha256": "788034bce0a8630c13294038bbdd2f4fc9a146798d071da6366ab5b22b02f3d9"
+    },
+    {
+      "path": "scripts/remote_directus.mjs",
+      "byte": 37271,
+      "sha256": "d7cfe77218bac729b83c48ae5f5213d28bb06b7d33995e6c055467a58e0f28a7"
+    },
+    {
+      "path": "scripts/verifica_integrita.py",
+      "byte": 3912,
+      "sha256": "735d0683e01e00384fece2922fda881a55b560a77b0eb33300fa1905e68841dd"
+    }
+  ]
+}

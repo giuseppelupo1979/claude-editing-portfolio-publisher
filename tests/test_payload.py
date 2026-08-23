@@ -59,6 +59,32 @@ class PublicationPayloadTest(unittest.TestCase):
         self.assertEqual(plan["photos"][0]["file"], "foto 01.jpg")
         self.assertEqual(plan["photos"][0]["caption"], "La porta trattiene la figura.")
         self.assertEqual(plan["photos"][0]["location_source"], "explicit")
+        # Coordinate scritte a mano nel blocco pubblicazione: sono una stima,
+        # e la Mappa pubblica non deve mostrarle come rilevamento GPS.
+        self.assertEqual(plan["photos"][0]["location_precision"], "approximate")
+
+    def test_handwritten_coordinates_are_not_promoted_to_exact(self):
+        data = analysis()
+        plan = PAYLOAD.build_plan(data, "test-site", Path("/tmp/photos"))
+        self.assertEqual(plan["photos"][0]["location_precision"], "approximate")
+
+    def test_exif_coordinates_are_exact(self):
+        data = analysis()
+        photo = data["pubblicazione"]["photos"][0]
+        for key in ("lat", "lng"):
+            del photo[key]
+        metrics = {
+            "immagini": [
+                {"id": "P001", "file": "foto 01.jpg", "lat": 40.85216, "lng": 14.26811}
+            ]
+        }
+        plan = PAYLOAD.build_plan(data, "test-site", Path("/tmp/photos"), metrics)
+        self.assertEqual(plan["photos"][0]["location_precision"], "exact")
+
+    def test_explicit_precision_wins_over_the_default(self):
+        data = analysis()
+        data["pubblicazione"]["photos"][0]["location_precision"] = "exact"
+        plan = PAYLOAD.build_plan(data, "test-site", Path("/tmp/photos"))
         self.assertEqual(plan["photos"][0]["location_precision"], "exact")
 
     def test_requires_all_bilingual_text(self):
