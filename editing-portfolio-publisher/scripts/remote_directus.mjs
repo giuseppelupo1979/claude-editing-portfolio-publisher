@@ -547,18 +547,35 @@ export async function provision(profile, rawOptions) {
       await persistJournal(journalFile, journal);
     }
 
+    // Il token tecnico puo' dimostrare una cosa sola: a quale utente appartiene.
+    // Directus restituisce il solo `id` su /users/me quando la policy non
+    // concede lettura su directus_users, ed e' esattamente il caso: la matrice
+    // approvata non concede alcun permesso su quella collezione, di proposito.
+    // Chiedere ruolo, stato e marker al token candidato significava pretendere
+    // che l'identita' tecnica fosse piu' permissiva di quanto la stessa matrice
+    // autorizza, e il provisioning non poteva concludersi su nessun Directus 11.
     const candidateClient = new DirectusClient(trustedCmsUrl, staticToken);
     let candidateMe;
     try {
-      candidateMe = await candidateClient.request('/users/me?fields=id,role,status,external_identifier');
+      candidateMe = await candidateClient.request('/users/me?fields=id');
     } catch (error) {
       if (tokenPending) journal.token_pending_file = tokenPending;
       throw error;
     }
-    if (candidateMe?.id !== user.id || relationId(candidateMe.role) !== role.id ||
-        candidateMe.status !== 'active' || candidateMe.external_identifier !== identity.marker) {
+    if (candidateMe?.id !== user.id) {
       if (tokenPending) journal.token_pending_file = tokenPending;
-      throw new Error('Il token candidato non certifica l’identità tecnica attesa');
+      throw new Error('Il token candidato non autentica l’utente tecnico atteso');
+    }
+    // Ruolo, stato e marker si verificano con il client amministrativo, che e'
+    // l'unica fonte in grado di rispondere. La verifica resta obbligatoria: e'
+    // cambiata la fonte, non il fatto accertato.
+    const adminView = await client.request(
+      `/users/${encodeURIComponent(user.id)}?fields=id,role,status,external_identifier`
+    );
+    if (relationId(adminView?.role) !== role.id || adminView?.status !== 'active' ||
+        adminView?.external_identifier !== identity.marker) {
+      if (tokenPending) journal.token_pending_file = tokenPending;
+      throw new Error('L’utente tecnico non risulta configurato come approvato');
     }
     if (tokenPending) {
       await privateRegularFile(paths.tokenFile, 'file token Directus', { allowMissing: true });
@@ -614,10 +631,15 @@ async function context(profile) {
   const binding = await readBinding(paths, canonical);
   const token = await readToken(paths.tokenFile);
   const client = new DirectusClient(binding.cms_url, token);
-  const me = await client.request('/users/me?fields=id,role,status,external_identifier');
-  if (me?.id !== binding.user_id || relationId(me.role) !== binding.role_id ||
-      me.status !== 'active' || me.external_identifier !== binding.marker) {
-    throw new Error('Identità tecnica non coerente con il binding token');
+  // Con il solo token tecnico si accerta l'identita', non i suoi attributi: la
+  // matrice approvata non concede lettura su directus_users e Directus
+  // restituisce percio' il solo id. Lo stato attivo e' implicito, perche' un
+  // utente sospeso non autentica. Ruolo e portata reale vengono verificati da
+  // checkEffectivePermissions contro /permissions/me, che e' una prova piu'
+  // forte dell'etichetta: dice cosa il token puo' fare, non come si chiama.
+  const me = await client.request('/users/me?fields=id');
+  if (me?.id !== binding.user_id) {
+    throw new Error('Il token non appartiene all’utente tecnico del binding');
   }
   return { profile: canonical, client, binding, me };
 }
