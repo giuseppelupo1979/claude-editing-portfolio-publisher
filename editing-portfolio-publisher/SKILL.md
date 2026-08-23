@@ -1,6 +1,6 @@
 ---
 name: editing-portfolio-publisher
-description: Analizza insiemi di fotografie come singoli scatti e come corpus, seleziona, costruisce sequenze, libri e gallerie, e può preparare e pubblicare una selezione su un portfolio Directus configurato localmente. Usala quando l'utente indica una cartella di almeno tre foto e chiede editing, portfolio, gallerie, testi o pubblicazione sul proprio sito. La pubblicazione richiede sempre una proposta editoriale approvata, configurazione esterna alla skill e conferma separata prima della messa online. Per una sola immagine usa critica-fotografica.
+description: Analizza insiemi di fotografie come singoli scatti e come corpus: misura, triage, selezione, fil rouge, cluster e gallerie, e in modalità photo editor monta un libro completo con sequenza, spread, didascalie e dummy PDF. Gestisce edit per mostra, portfolio online e concorsi, diagnostica i difetti ricorrenti, e può pubblicare una selezione su un portfolio Directus configurato localmente, con proposta approvata e conferma separata. Usala ogni volta che le immagini sono più di due, o quando l'utente indica una cartella di foto, o parla di portfolio, progetto, serie, selezione, editing, sequenza, libro fotografico, menabò, dummy, gallerie, temi comuni, fil rouge, didascalie, quali foto tenere o scartare, in che ordine metterle, cosa hanno in comune, vuole candidarsi a un concorso o mettere delle foto sul proprio sito. Usala anche per "guarda queste foto e dimmi che ne pensi nell'insieme". Per la critica di una singola immagine isolata usa critica-fotografica.
 ---
 
 # Editing, portfolio e pubblicazione
@@ -17,17 +17,25 @@ divergono, dillo e spiega perché.
 L'interlocutore è un fotografo avanzato. Dagli del tu. Trattalo da pari, e non
 proteggerlo dalle brutte notizie: un edit gentile è un edit inutile.
 
-## Confine con critica-fotografica
+## Confini con le altre skill
 
 | Situazione | Skill |
 |---|---|
 | una immagine sola, parere o critica | `critica-fotografica` |
 | da 3 immagini in su, una cartella, un progetto, un archivio | questa |
 | scheda profonda su una immagine chiave emersa dall'edit | passa a `critica-fotografica`, che possiede la scheda a 13 sezioni |
+| è installata anche `editing-portfolio` | **questa ha la precedenza**, perché la contiene: stesse otto modalità più la pubblicazione |
 
 Se `critica-fotografica` è installata, non duplicare il suo lavoro: quando servono
 le tredici sezioni su 2 o 3 immagini chiave, invocala e integra il risultato. Se
 non è installata, dichiaralo e fornisci una versione compatta della scheda.
+
+`editing-portfolio` è la skill da cui questa nasce, e le due descrizioni si
+somigliano abbastanza da farle scattare sulle stesse richieste. Se ti accorgi di
+essere partito con quella e il lavoro riguarda una cartella di fotografie, dillo in
+una riga e passa a questa: fa tutto quello che fa lei, in più sa preparare la
+pubblicazione. Nel dubbio, la regola è una sola: non lavorare con tutte e due nella
+stessa sessione, perché produrresti due `analisi.json` che si contraddicono.
 
 ## Le otto modalità
 
@@ -57,8 +65,9 @@ impressione e misura).
 ### Percorso incrementale ed economico
 
 Usa `scripts/pipeline_incrementale.py`: preflight unico, inventario SHA-256,
-approvazione editoriale legata a un hash e rigenerazione per dipendenze. Non
-decidere a memoria cosa è ancora valido. Leggi
+rigenerazione per dipendenze e approvazione hashata per la sola pubblicazione. Gli
+elaborati locali si rigenerano senza chiedere una firma, il piano che finisce sul
+sito no. Non decidere a memoria cosa è ancora valido. Leggi
 `references/flusso-incrementale.md` prima di una prima esecuzione, di una ripresa o
 di una correzione. Per 3-12 foto usa una griglia sola e apri l'alta risoluzione
 solo dove la decisione richiede dettagli. L'ottimizzazione elimina ripetizioni,
@@ -67,15 +76,19 @@ non passaggi editoriali.
 **F0. Controllo di integrità.** Prima di tutto, un comando solo:
 
 ```bash
-ls agents/ scripts/ references/
+python3 scripts/verifica_integrita.py
 ```
 
-Confrontalo con l'inventario in fondo a questo file, sezione *Versione e
-integrità*. Se manca anche un solo file, **stai lavorando su una copia vecchia o
-incompleta della skill**: fermati, dillo all'utente in una riga citando cosa manca,
-e chiedi di reinstallare `editing-portfolio-publisher` dal repo. Non
-proseguire ricostruendo a mano il pezzo mancante: produrresti un lavoro che sembra
-completo e non lo è, e l'utente se ne accorgerebbe solo alla consegna.
+Risponde con una riga. Se dice `OK`, la copia è integra e puoi lavorare. Se dice
+altro, **stai lavorando su una copia vecchia, incompleta o manomessa della skill**:
+fermati, riporta all'utente la riga così com'è, e chiedi di reinstallare
+`editing-portfolio-publisher` dal repo. Non proseguire ricostruendo a mano il pezzo
+mancante: produrresti un lavoro che sembra completo e non lo è, e l'utente se ne
+accorgerebbe solo alla consegna.
+
+Il controllo confronta byte e SHA-256 di ogni file, `SKILL.md` compreso, contro
+`references/integrita.json`. Vede quindi anche un file presente ma troncato, e
+guarda dentro `scripts/lib/`, che un `ls` non mostrerebbe.
 
 Il costo del controllo sono due secondi. Il costo di saltarlo è un editing intero
 da rifare.
@@ -154,8 +167,9 @@ attribuiti all'autore. Quello che non sai va scritto come segnaposto `[luogo]`,
 persona e finirà sotto il suo nome: consegnala dichiarando che è una bozza da
 riscrivere con le sue parole.
 
-**F6. Consegna, in due posti.** Scrivi `analisi.json`, genera i deliverable con gli
-script, poi fai **entrambe** queste cose, non una sola:
+**F6. Consegna, in due posti.** Leggi `references/checklist-consegna.md` e passala
+voce per voce. Poi scrivi `analisi.json`, genera i deliverable con gli script, e fai
+**entrambe** queste cose, non una sola:
 
 1. consegnali in chat con SendUserFile, così l'utente li vede da qualunque
    dispositivo;
@@ -331,13 +345,43 @@ Tutti gli script condividono `analisi.json`. Prima di crearlo o modificarlo legg
 per sequenza e copertina. Il file è anche il documento completo vincolato
 dall'approvazione incrementale.
 
+## Dove gira ogni comando
+
+Questa skill può trovarsi in due ambienti diversi, e non è indifferente quale dei
+due stai usando. Sbagliarlo non produce un errore chiaro: produce un fallimento a
+metà catena, con un messaggio che parla d'altro.
+
+| Cosa | Dove gira | Perché |
+|---|---|---|
+| `verifica_integrita.py`, `prepara_provino.py`, `esporta_tabella.py`, `genera_*`, `pipeline_incrementale.py` | nello spazio di lavoro della sessione | servono Pillow, numpy e le immagini portate lì; nessuno di questi tocca l'esterno |
+| `publish_directus.mjs` (`provision`, `doctor`, `plan`, `stage`, `release`) | sul computer dell'utente | servono la chiave SSH privata e il profilo con permessi `600`, che vivono solo lì |
+
+**Prima di promettere una pubblicazione, verifica di poterla fare.** Se lo spazio di
+lavoro della sessione non è il computer dell'utente, la chiave SSH non c'è e non può
+arrivarci: `doctor` fallirà lamentando un profilo mancante, che è un messaggio
+fuorviante, e `preflight --doctor-site` si fermerà per lo stesso motivo. Non
+insistere e non cercare scorciatoie. Fermati al piano:
+
+1. genera il piano con `pipeline_incrementale.py build CARTELLA --confirm --only publication`;
+2. consegna `publication-plan.json` insieme agli altri deliverable;
+3. scrivi all'utente il comando esatto di `stage` da lanciare lui, con i percorsi
+   veri del suo profilo e del piano, e ricordagli che `release` è un secondo
+   comando con una seconda conferma.
+
+Un limite dichiarato in anticipo costa una riga. Uno `stage` interrotto a metà costa
+un controllo manuale dentro Directus.
+
+Nel dubbio chiediglielo: "gli script girano qui o sul tuo computer?" è una domanda
+sola e chiude la questione per tutta la sessione.
+
 ## Gli script
 
 Eseguili dalla cartella della skill. Tutti accettano `--help`.
 
 | Script | Cosa fa |
 |---|---|
-| `scripts/pipeline_incrementale.py preflight\|approve\|build` | hash degli originali, approvazione unica e rigenerazione selettiva |
+| `scripts/verifica_integrita.py` | confronta byte e SHA-256 di tutti i file con `references/integrita.json`. È F0, e risponde con una riga |
+| `scripts/pipeline_incrementale.py preflight\|approve\|build` | hash degli originali, approvazione di pubblicazione e rigenerazione selettiva |
 | `scripts/prepara_provino.py CARTELLA` | miniature, griglie di provino etichettate, `metriche.csv` e `.json`, `coppie_simili.csv`, `firma.json`. Sempre il primo passo |
 | `scripts/esporta_tabella.py analisi.json` | punteggi ponderati per tutte le destinazioni, classifiche, `tabella.xlsx` e `tabella.csv` |
 | `scripts/genera_testi.py analisi.json` | `testi.md`: titoli candidati, introduzione, statement, didascalie numerate come tavole, segnaposto aperti, referto dei controlli sui testi. Con `--solo-controllo` stampa solo il referto |
@@ -415,7 +459,9 @@ Cluster con nome definitivo, ordine di scorrimento, immagine esca e perché,
 tenuta su schermo piccolo, quante immagini per galleria, cosa non mettere online.
 
 ### `pubblicazione-sito`
-Prima completa la modalità `galleria`, poi leggi
+Prima completa la modalità `galleria`, poi leggi la sezione *Dove gira ogni comando*
+qui sopra e verifica di poter davvero raggiungere il sito: se lo spazio di lavoro
+non è il computer dell'utente, fermati al piano e passagli i comandi. Poi leggi
 `references/pubblicazione-sito.md`. Nel preflight incrementale passa `--profile` e
 `--doctor-site`: configurazione, token, schema e geolocalizzazioni incomplete
 emergono prima dell'analisi finale. Produci una galleria per nucleo editoriale e
@@ -442,6 +488,13 @@ precedente, piano, commissione. Nessun voto sulle singole immagini.
 
 - Italiano, registro informale, dai del tu.
 - **Mai trattini lunghi.** Usa virgole, due punti o parentesi.
+- **Accenti veri, mai apostrofi.** Si scrive è, più, perché, così, città, già,
+  però, sé, né, cioè, lì. Non si scrive e', piu', perche', cosi'. Vale per ogni
+  testo che finisce in `analisi.json`, e a maggior ragione per titoli, descrizioni
+  e alt text di una galleria, che finiscono su un sito pubblico e lì restano
+  finché qualcuno non li corregge a mano nel CMS. Lo stesso per i nomi propri:
+  Ballarò, non Ballaro. `genera_testi.py` lo segnala fra gli avvisi;
+  `genera_payload_pubblicazione.py` si rifiuta di generare il piano.
 - Vietati i complimenti generici. Ogni lode indica l'elemento preciso che la giustifica.
 - Vietato il linguaggio da manuale: parla di queste fotografie, non della fotografia.
 - Niente preamboli, niente "spero che questa analisi ti sia utile".
@@ -470,6 +523,7 @@ Leggili quando servono, non tutti insieme.
 | File | Quando |
 |---|---|
 | `references/flusso-incrementale.md` | prima di preflight, ripresa, correzione o rigenerazione selettiva |
+| `references/checklist-consegna.md` | in F6, prima di consegnare: le trenta voci di controllo |
 | `references/analisi-json.md` | prima di creare o modificare il contratto condiviso dagli script |
 | `references/ingestione.md` | in F1, sempre se le immagini sono in una cartella sul computer dell'utente, o se ci sono RAW o più di 50 file |
 | `references/connettori.md` | in F4, prima di dichiarare il fil rouge e prima di costruire i cluster |
@@ -482,62 +536,17 @@ Leggili quando servono, non tutti insieme.
 
 ## Verifica prima di consegnare
 
-- La modalità è dichiarata, e il format lock di quella modalità è rispettato.
-- Il passaggio cieco è stato fatto **prima** delle metriche, ed è riportato.
-- Hai dichiarato cosa hai guardato: solo griglie, o anche miniature, e quali.
-- Ogni numero citato esiste in `metriche.json`, con la sua etichetta `[MISURATO]`.
-- Il numero di immagini dell'edit era fissato prima della selezione.
-- Le coppie ridondanti segnalate dallo script sono state tutte risolte, con motivo.
-- C'è il kill your darling, c'è l'edit alternativo, c'è lo scarto difeso.
-- I bias sono passati in rassegna uno per uno, non genericamente.
-- I difetti ricorrenti hanno una frequenza numerica, non un aggettivo.
-- Ogni cluster e ogni galleria hanno un nome che non compare nella lista nera di
-  `references/didascalie.md`.
-- Se c'è pubblicazione: proposta approvata prima di `stage`, seconda conferma prima
-  di `release`, profilo esterno, controllo duplicati e manifest senza segreti.
-- Se è servito il provisioning: preflight senza SSH consegnato all'utente,
-  autorizzazione separata legata a `authorization_hash`, apply con lo stesso hash,
-  journal recuperabile e postcondizioni `doctor` più `/permissions/me` superate.
-- Se è servito il provisioning: dominio email collegato al CMS, admin env `600`
-  non symlink con `PUBLIC_URL` esatto, token confinato e vincolato, identità
-  namespaced e matrice campo per campo senza wildcard, `delete`, admin o app.
-- Se c'è pubblicazione: ogni foto ha `place`, `lat` e `lng`; la provenienza è
-  dichiarata e qualsiasi default geografico risulta confermato dall'utente.
-- **Nessun giudizio nelle didascalie.** La descrizione di lavoro contiene la tua
-  valutazione ed è per l'autore; la didascalia va stampata sotto la fotografia e il
-  lettore non deve trovarci dentro il tuo verdetto. Se una didascalia contiene "la
-  decisione è", "ottiene", "manca", "debole", è finita nel posto sbagliato.
-- **Ogni immagine sottoposta ha la sua descrizione**, scarti compresi, e la
-  descrizione compare accanto alla miniatura in tutti i punti in cui parli di quella
-  immagine: provino, sequenza, cluster, scarti, report, `testi.md`.
-- Ogni immagine dell'edit ha anche la sua didascalia editoriale, tutte nello stesso
-  registro, e il registro è dichiarato in `progetto.registro_didascalie`.
-- Ci sono i tre titoli candidati, l'introduzione (250 a 500 parole) e lo statement
-  (60 a 120), e sono tre testi distinti che non si ripetono a vicenda.
-- `genera_testi.py` è stato eseguito, gli avvisi sono stati risolti o motivati, e i
-  segnaposto aperti sono stati elencati all'utente.
-- Nessun fatto inventato nei testi: luoghi, nomi, ricordi e motivazioni che non puoi
-  provare sono segnaposto, e l'introduzione è consegnata come bozza da riscrivere.
-- Nessun autore citato ricade nelle sue condizioni di non applicabilità.
-- `analisi.json` è valido e gli script hanno girato senza errori.
-- I deliverable sono stati consegnati **in chat con SendUserFile e scritti sul disco
-  dell'utente** in `<cartella delle immagini>/_analisi`, e hai verificato con
-  `device_list_dir` che ci sono davvero, elencandoli con il percorso. Se non hai
-  potuto scrivere sul disco, l'hai detto in una riga spiegando perché.
-- `analisi.json` è fra i file scritti sul disco, non solo in chat.
-- Se c'è una sequenza: la copertina è proposta con motivazione e almeno due
-  alternative, il ritmo ha la sua legenda e il suo `ritmo_perche`, e ci sono da due a
-  tre alternative scartate con stringa e motivo.
-- Ogni pagina con più di una immagine regge le cinque condizioni di
-  `references/sequenza.md`, sezione 11.
-- Se la modalità produce un edit ordinato, `dummy.pdf` esiste e contiene copertina,
-  titolo, testi, spread, didascalie, descrizioni, attrezzatura EXIF e colophon.
-- L'attrezzatura è presentata come elenco puntato, raggruppato almeno per copertura
-  EXIF, corpi, obiettivi e focali; il colophon è distinto in sezioni tematiche e non
-  duplica l'elenco dell'attrezzatura.
-- L'elenco dell'attrezzatura usa solo `metriche.json`; dati assenti sono dichiarati
-  non determinabili e non completati per deduzione.
-- Nessun trattino lungo nel testo.
+La lista completa, trenta voci, sta in `references/checklist-consegna.md`: leggila
+in F6 e passala una per una. Qui restano le cinque che, se le salti, rendono il
+lavoro sbagliato e non soltanto incompleto:
+
+1. La modalità è dichiarata e il suo format lock è rispettato.
+2. Il passaggio cieco è stato fatto **prima** delle metriche, ed è riportato.
+3. Ogni numero citato esiste in `metriche.json`, con l'etichetta `[MISURATO]`.
+4. Ogni immagine sottoposta ha la sua descrizione, scarti compresi; ogni immagine
+   dell'edit ha anche la sua didascalia, e nessuna didascalia contiene un giudizio.
+5. I deliverable sono in chat **e** sul disco dell'utente, e l'hai verificato con
+   `device_list_dir` elencando i percorsi.
 
 **Criterio di successo:** il report funziona se dice all'autore almeno una cosa sul
 proprio lavoro che lui non poteva sapere. Non un difetto in più su una foto: un
@@ -547,50 +556,20 @@ classificare bene le foto, ha funzionato a metà.
 
 ## Versione e integrità
 
-<!-- INIZIO INVENTARIO: generato da build-skill.sh, non modificare a mano -->
+<!-- INIZIO VERSIONE: generato da build-skill.sh, non modificare a mano -->
 
-**Versione 2026-08-22.11.** Oltre a questo SKILL.md, la skill è composta dai file
-qui sotto, e li vuole tutti.
+**Versione 2026-08-23.5.** L'inventario completo, con byte e SHA-256 di ogni
+file compreso questo, sta in `references/integrita.json` e si controlla con
+`scripts/verifica_integrita.py`.
 
-| File | Byte |
-|---|---|
-| `agents/openai.yaml` | 305 |
-| `references/analisi-json.md` | 3146 |
-| `references/autodiagnosi.md` | 12399 |
-| `references/canone-editing.md` | 14294 |
-| `references/connettori.md` | 11117 |
-| `references/destinazioni.md` | 8477 |
-| `references/didascalie.md` | 22132 |
-| `references/flusso-incrementale.md` | 4390 |
-| `references/ingestione.md` | 13197 |
-| `references/pubblicazione-sito.md` | 14356 |
-| `references/publication-plan.schema.json` | 3082 |
-| `references/sequenza.md` | 17235 |
-| `references/site-profile.example.json` | 1810 |
-| `references/site-profile.schema.json` | 6274 |
-| `scripts/esporta_tabella.py` | 9655 |
-| `scripts/genera_dummy_pdf.py` | 35463 |
-| `scripts/genera_payload_pubblicazione.py` | 10961 |
-| `scripts/genera_provino_html.py` | 41645 |
-| `scripts/genera_testi.py` | 19807 |
-| `scripts/lib/publisher-core.mjs` | 19440 |
-| `scripts/pipeline_incrementale.py` | 24668 |
-| `scripts/prepara_provino.py` | 21094 |
-| `scripts/publish_directus.mjs` | 12229 |
-| `scripts/remote_directus.mjs` | 37271 |
-
-<!-- FINE INVENTARIO -->
-
-**Come si usa.** In F0 esegui `ls agents/ scripts/ references/` e confronta con l'elenco
-qui sopra. Se combacia, la skill è integra e puoi lavorare. Se manca un file, la
-copia è vecchia: fermati e chiedi all'utente di reinstallare il pacchetto.
+<!-- FINE VERSIONE -->
 
 **Perché esiste questa sezione.** Una skill installata in un account e una skill
 in un repository sono due cose diverse, e possono andare fuori sincronia senza che
 nessuno se ne accorga: il repository avanza a ogni commit, l'account resta fermo
 all'ultimo pacchetto caricato. Da dentro una sessione non si vedono i commit, si
-vedono solo i file. Quindi il controllo non può essere sulla data: deve essere
-sull'inventario, che è l'unica cosa osservabile.
+vedono solo i file. Quindi il controllo non può essere sulla data: deve essere sul
+contenuto, che è l'unica cosa osservabile.
 
 È già successo: una sessione ha lavorato con una copia priva di `genera_testi.py`
 e delle regole sui due testi per immagine, ha prodotto un editing senza didascalie
@@ -598,22 +577,8 @@ e senza letture di lavoro, e il difetto è emerso solo quando l'utente ha
 confrontato il risultato con un provino precedente. F0 esiste per rendere quel
 fallimento impossibile.
 
-## Rilascio
-
-Chi modifica questa skill esegue, dalla radice del repository:
-
-```bash
-./build-skill.sh
-```
-
-Lo script rigenera `editing-portfolio-publisher.skill`, aggiorna l'inventario qui sopra e
-stampa cosa è cambiato. Poi si committa **sia** i sorgenti **sia** il pacchetto:
-
-```bash
-git add -A && git commit -m "..."
-```
-
-Il push resta un'azione separata ed esplicita. **Passo che si dimentica:** installare o aggiornare la cartella
-`editing-portfolio-publisher` nel proprio ambiente skill. Finché non lo fai, le
-sessioni continuano a usare la versione precedente, e il repository aggiornato non
-serve a niente.
+Il controllo confronta byte e SHA-256, non i soli nomi: vede un file mancante, un
+file troncato, un file modificato a mano, e guarda anche dentro le sottocartelle,
+dove vive `scripts/lib/publisher-core.mjs`. Le istruzioni per chi modifica la
+skill e la rilascia stanno nel README del repository, non qui: a una sessione di
+lavoro non servono, e questo file viene letto per intero ogni volta.

@@ -39,24 +39,36 @@ python3 scripts/pipeline_incrementale.py build CARTELLA --confirm
 Se `analisi.json` non esiste, il comando produce soltanto ingestione, metriche,
 miniature e griglia e poi si ferma. Non inventa l'analisi.
 
-Quando la proposta è completa, genera un unico documento di approvazione:
+## Che cosa richiede una firma
+
+Solo la pubblicazione. `testi.md`, `tabella`, `provino.html` e `dummy.pdf` sono file
+riscrivibili nella cartella dell'utente: `build --confirm` li rigenera senza chiedere
+niente, e correggere un refuso in una didascalia costa un comando, non un giro di
+autorizzazione. Il piano che finisce su Directus è un'altra cosa, e resta vincolato a
+un `authorization_hash`.
+
+Quando la proposta di pubblicazione è completa, genera il documento di approvazione:
 
 ```bash
 python3 scripts/pipeline_incrementale.py approve CARTELLA
 ```
 
-Il documento include hash degli originali e dell'intero `analisi.json`: titolo,
-sequenza, luoghi, coordinate, gallerie, testi e blocco di pubblicazione. Mostralo
-all'utente. Dopo la sua approvazione registra esattamente lo stesso documento:
+Il documento include l'hash degli originali e tutto ciò che finisce online: blocco
+`pubblicazione`, gallerie, e per ogni immagine file, titolo, descrizione, didascalia,
+luogo, coordinate, provenienza e precisione. Non include titolo del progetto,
+introduzione, statement, colophon e sequenza del libro, che non escono da questa
+macchina. Mostralo all'utente. Dopo la sua approvazione registra esattamente lo
+stesso documento:
 
 ```bash
 python3 scripts/pipeline_incrementale.py approve CARTELLA \
   --confirm --authorization-hash HASH
 ```
 
-Qualsiasi modifica invalida l'approvazione. Dopo la registrazione, `build
---confirm` genera solo gli output scaduti. `--only dummy` o `--only publication`
-restringe ulteriormente il lavoro.
+Qualsiasi modifica a ciò che il documento copre invalida l'approvazione, e
+`--only publication` si rifiuta di ricostruire il piano finché non ne registri una
+nuova. Gli altri artefatti non se ne accorgono. `build --confirm` genera solo gli
+output scaduti; `--only dummy` o `--only texts,table` restringe il lavoro.
 
 ## Grafo delle dipendenze
 
@@ -64,7 +76,7 @@ restringe ulteriormente il lavoro.
 |---|---|
 | ingestione, metriche, miniature, griglie | hash originali, parametri e script di ingestione |
 | `testi.md` | campi testuali, ordine editoriale e script testi |
-| `tabella.csv/.xlsx` | voti, ruoli, cluster, sequenza e script tabella |
+| `tabella.csv` e, se `openpyxl` è installato, `tabella.xlsx` | voti, ruoli, cluster, sequenza, disponibilità di `openpyxl` e script tabella |
 | `provino.html` | campi visualizzati, miniature e script HTML |
 | `dummy.pdf` + `dummy.qa.json` | sequenza, apparato del libro, colophon, metriche EXIF, miniature e script PDF |
 | `publication-plan.json` | solo blocco pubblicazione, campi immagine usati, metriche, sorgente e profilo |
@@ -75,7 +87,9 @@ Conseguenze intenzionali:
 - cambiare soltanto il blocco `pubblicazione` rende scaduto soltanto il piano;
 - una correzione a descrizione, didascalia o luogo rigenera gli elaborati che
   mostrano quel campo, senza ricalcolare EXIF, metriche o miniature;
-- cambiare un originale invalida ingestione e approvazione editoriale.
+- cambiare un originale invalida ingestione e approvazione di pubblicazione;
+- il foglio Excel entra nel grafo solo quando `openpyxl` c'è: senza, l'artefatto è
+  il solo CSV e non risulta perennemente scaduto.
 
 ## Controllo PDF mirato
 

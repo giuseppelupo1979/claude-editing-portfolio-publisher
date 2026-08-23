@@ -1,0 +1,48 @@
+name: test e pacchetto
+
+# Tre controlli, ed e' il terzo quello che conta di piu': verifica che il
+# pacchetto committato corrisponda ai sorgenti committati. Senza, sorgenti e
+# .skill possono divergere senza che nessuno se ne accorga, che e' esattamente
+# il fallimento raccontato nella sezione "Versione e integrita" di SKILL.md.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verifica:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Dipendenze Python
+        run: pip install pillow numpy openpyxl
+
+      - name: Integrita della copia committata
+        run: python3 editing-portfolio-publisher/scripts/verifica_integrita.py
+
+      - name: Test Python
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Test Node
+        run: node --test tests/*.test.mjs
+
+      - name: Il pacchetto deve corrispondere ai sorgenti
+        run: |
+          ./build-skill.sh
+          if ! git diff --quiet; then
+            echo "::error::build-skill.sh ha prodotto un risultato diverso da quello committato."
+            echo "Esegui ./build-skill.sh in locale e committa pacchetto, VERSIONE, manifest e SKILL.md."
+            git diff --stat
+            exit 1
+          fi

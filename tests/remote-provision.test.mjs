@@ -88,19 +88,30 @@ function directusMock(siteProfile) {
         return response(null, 401);
       }
       if (state.tokenMeOverride) return response(state.tokenMeOverride);
+      // Directus restituisce il solo id quando la policy dell'utente non
+      // concede lettura su directus_users, ed e' il caso della matrice
+      // approvata. Il mock deve comportarsi come il server vero: quando
+      // restituiva anche ruolo, stato e marker, il provisioning passava nei
+      // test e falliva contro ogni Directus reale.
       return state.user?.status === 'active'
-        ? response({
-          id: state.user.id,
-          role: state.user.role,
-          status: state.user.status,
-          external_identifier: state.user.external_identifier,
-        })
+        ? response({ id: state.user.id })
         : response(null, 401);
+    }
+    if (path === '/users/user-1' && method === 'GET') {
+      return response(state.user);
     }
     if (path === '/permissions/me' && method === 'GET') {
       return response(state.effectiveOverride ?? effectiveFromPermissions(state.permissions));
     }
-    if (path === '/server/health' && method === 'GET') return response({ status: state.healthStatus });
+    if (path === '/server/health' && method === 'GET') {
+      // Directus non incapsula questa risposta in `data`: il mock deve
+      // rispondere come il server vero, altrimenti il client puo' sbagliare a
+      // spacchettarla e i test non se ne accorgono.
+      return new Response(JSON.stringify({ status: state.healthStatus }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
     if (path === '/fields/photos' && method === 'GET') {
       const fields = ['id', ...Object.values(siteProfile.directus.fields.photo).filter(Boolean)];
       return response([...new Set(fields)]
@@ -387,6 +398,50 @@ test('non adotta utenti umani né sovrascrive token di un altro utente', async (
     );
     assert.equal(readFileSync(siteProfile.directus.token_file, 'utf8'), 'other-service-token\n');
     assert.equal(other.state.mutations.length, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalHome === undefined) delete process.env.HOME;
+    else process.env.HOME = originalHome;
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+test('il token tecnico certifica solo il proprio id, e tanto basta', async () => {
+  // Regressione dell'undicesimo rilievo, emerso contro un Directus 11 vero.
+  // La matrice approvata non concede lettura su directus_users, quindi
+  // /users/me restituisce il solo id: pretendere ruolo, stato e marker dal
+  // token tecnico rendeva il provisioning impossibile da concludere, e
+  // bloccava anche doctor, plan, stage e release, che passano tutti da
+  // context(). Il mock ora risponde come il server vero.
+  const originalFetch = globalThis.fetch;
+  const originalHome = process.env.HOME;
+  const folder = mkdtempSync(join(tmpdir(), 'directus-provision-id.'));
+  try {
+    process.env.HOME = folder;
+    const siteProfile = profile(folder);
+    const adminEnv = join(folder, 'directus.env');
+    writeFileSync(
+      adminEnv,
+      `PUBLIC_URL=${siteProfile.cms_url}\nADMIN_EMAIL=admin@test.example.com\nADMIN_PASSWORD=test-only\n`,
+      { mode: 0o600 }
+    );
+    const mock = directusMock(siteProfile);
+    globalThis.fetch = mock.fetchMock;
+
+    const preflight = await provision(siteProfile, adminOptions(siteProfile, adminEnv));
+    const applied = await provision(
+      siteProfile,
+      adminOptions(siteProfile, adminEnv),
+      true,
+      preflight.authorization_hash
+    );
+    assert.equal(applied.ok, true);
+    assert.equal(applied.user_id, 'user-1');
+
+    // doctor passa da context(): deve reggere con lo stesso /users/me ridotto.
+    const referto = await doctor(siteProfile);
+    assert.equal(referto.ok, true);
+    assert.equal(referto.cms_status, 'ok');
   } finally {
     globalThis.fetch = originalFetch;
     if (originalHome === undefined) delete process.env.HOME;

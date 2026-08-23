@@ -34,6 +34,7 @@ poi si costruiscono i dati CMS, infine si modifica il sito solo dopo due conferm
 15. [Test e validazione](#15-test-e-validazione)
 16. [Aggiornamenti dall’upstream](#16-aggiornamenti-dallupstream)
 17. [Problemi frequenti](#17-problemi-frequenti)
+18. [Rilascio](#18-rilascio)
 
 ## 1. Cosa fa
 
@@ -154,7 +155,8 @@ essere `null`; la matrice campo per campo è definita in
 
 ## 4. Installazione locale
 
-Clona il fork e installa la cartella skill:
+Clona il fork e installa la cartella skill nella directory delle skill del tuo
+ambiente:
 
 ```bash
 git clone https://github.com/giuseppelupo1979/claude-editing-portfolio-publisher.git
@@ -162,14 +164,24 @@ cp -R claude-editing-portfolio-publisher/editing-portfolio-publisher \
   ~/.codex/skills/editing-portfolio-publisher
 ```
 
-Per rigenerare il pacchetto e l’inventario:
+In alternativa distribuisci `editing-portfolio-publisher.skill`, che è lo stesso
+contenuto in un archivio zip.
+
+Subito dopo l’installazione verifica la copia:
 
 ```bash
-./build-skill.sh
+python3 ~/.codex/skills/editing-portfolio-publisher/scripts/verifica_integrita.py
 ```
 
+Deve rispondere `Integrita: OK`. È lo stesso comando che la skill esegue in F0 a
+ogni sessione: confronta byte e SHA-256 di ogni file, `SKILL.md` compreso, con
+`references/integrita.json`.
+
 Il repository può convivere con la skill originale perché il nome interno è
-`editing-portfolio-publisher`.
+`editing-portfolio-publisher`. **Non tenerle però attive tutte e due**: le
+descrizioni si sovrappongono e non è prevedibile quale delle due scatti su una
+richiesta di editing. Questa contiene l’altra, quindi se installi questa
+disinstalla `editing-portfolio`.
 
 ## 5. Struttura del profilo JSON SSH
 
@@ -703,12 +715,15 @@ La cartella infrastrutturale di un VPS non deve essere copiata dentro questo for
 ## 15. Test e validazione
 
 ```bash
+python3 editing-portfolio-publisher/scripts/verifica_integrita.py
 python3 -m unittest discover -s tests -p 'test_*.py'
 node --test tests/*.test.mjs
-python3 /percorso/skill-creator/scripts/quick_validate.py \
-  editing-portfolio-publisher
-./build-skill.sh
+./build-skill.sh && git diff --quiet || echo "pacchetto e sorgenti divergono"
 ```
+
+Gli stessi comandi girano in CI su ogni push, in `.github/workflows/ci.yml`.
+L’ultimo è il più importante: fallisce se il pacchetto committato non corrisponde
+ai sorgenti committati.
 
 I test coprono:
 
@@ -734,7 +749,12 @@ I test coprono:
 - isolamento delle modifiche a colophon e piano di pubblicazione;
 - manifest QA del dummy, pagine cambiate e controlli overflow;
 - estrazione dell’attrezzatura EXIF dalle sole tavole selezionate;
-- scansione anti-segreti del repository.
+- scansione anti-segreti del repository;
+- precisione geografica: `exact` solo da EXIF o su dichiarazione esplicita;
+- ambito dell’approvazione: vincola la pubblicazione, non gli elaborati locali;
+- foglio Excel nel grafo delle dipendenze solo quando `openpyxl` può produrlo;
+- manifest di integrità completo, e rilevamento di file troncati o modificati;
+- potatura della cache, forma di `analisi.json`, redazione dell’output di doctor.
 
 I test locali non contattano il sito reale e non modificano Directus.
 
@@ -800,3 +820,35 @@ MIT, vedi `LICENSE`.
 
 Il lavoro editoriale deriva da `editing-portfolio`. Il modulo SSH/Directus e il
 dummy esteso appartengono a questo fork.
+
+## 18. Rilascio
+
+Chi modifica la skill esegue, dalla radice del repository:
+
+```bash
+./build-skill.sh
+```
+
+Lo script fa quattro cose nell’ordine: calcola l’impronta del contenuto e
+incrementa la versione **solo se qualcosa è cambiato davvero**, riscrive la riga di
+versione dentro `SKILL.md`, rigenera `references/integrita.json` con byte e SHA-256
+di ogni file (`SKILL.md` compreso), crea il pacchetto `.skill` e infine rilancia
+`verifica_integrita.py` come postcondizione. `VERSIONE` viene scritto solo dopo che
+il pacchetto esiste, così un’interruzione a metà non lascia i sorgenti a dichiarare
+una versione mai impacchettata.
+
+Poi si committa **sia** i sorgenti **sia** il pacchetto:
+
+```bash
+git add -A && git commit -m "..."
+```
+
+Il push resta un’azione separata ed esplicita.
+
+**Passo che si dimentica:** installare o aggiornare la cartella
+`editing-portfolio-publisher` nel proprio ambiente skill. Finché non lo fai, le
+sessioni continuano a usare la versione precedente, e il repository aggiornato non
+serve a niente. Da quando esiste `verifica_integrita.py` te ne accorgi comunque:
+F0 confronta la copia installata con il proprio manifest, non con il repository,
+quindi una copia vecchia ma coerente passa il controllo. Il modo per accorgersene è
+confrontare il numero di versione che la skill dichiara con quello in `VERSIONE`.

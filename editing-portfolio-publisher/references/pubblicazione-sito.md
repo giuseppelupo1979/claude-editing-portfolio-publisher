@@ -225,21 +225,30 @@ dagli EXIF quando esistono, mai dalla memoria.
 
 La pagina Mappa richiede `lat` e `lng` su ogni record `photos`; `place` è
 l'etichetta leggibile mostrata nel popup. Il generatore risolve i valori in questo
-ordine:
+ordine, e non fa nient'altro:
 
 1. metadati espliciti della fotografia nel blocco `pubblicazione`;
 2. valori già confermati nell'elemento corrispondente di `immagini`;
 3. coordinate GPS estratte in `metriche.json`;
-4. reverse geocoding delle coordinate GPS per ottenere `place`;
-5. `pubblicazione.location_defaults`, soltanto con `confirmed_by_user=true`.
+4. `pubblicazione.location_defaults`, soltanto con `confirmed_by_user=true`.
 
-Il reverse geocoding è automatico solo quando produce un luogo non ambiguo. Salva
-`location_source="reverse-geocoded"`; in caso contrario chiedi conferma.
+**Il reverse geocoding non è automatico: nessuno script lo esegue.** Gli EXIF danno
+`lat` e `lng`, mai `place`. Quel nome lo scrivi tu, e rientra dal punto 2. Se lo
+ricavi da un servizio di geocoding, fallo prima di generare il piano, salvalo
+nell'immagine dentro `analisi.json` e marca `location_source="reverse-geocoded"`.
+Se il servizio restituisce più di un candidato, o se la rete dell'ambiente in cui
+stai lavorando è filtrata, non indovinare: chiedi il nome all'utente. Un luogo
+sbagliato su una mappa pubblica è peggio di un luogo mancante, perché nessuno va a
+controllarlo.
 
 Se tutta la serie è stata scattata nello stesso luogo e non ha GPS, chiedi
 all'utente una conferma unica. Registra un punto cittadino o di quartiere come
 `precision="approximate"`; usa `exact` solo per coordinate EXIF o fornite come
-posizione effettiva. Se una foto ha un luogo diverso, valorizzala singolarmente.
+posizione effettiva. Il generatore applica già da solo questo criterio: senza un
+`location_precision` esplicito assegna `exact` soltanto quando `lat` e `lng`
+vengono entrambe dagli EXIF, e `approximate` in ogni altro caso, comprese le
+coordinate scritte a mano. Se una foto ha un luogo diverso, valorizzala
+singolarmente.
 
 Se `place`, `lat` o `lng` restano mancanti, `genera_payload_pubblicazione.py` deve
 fallire e indicare i file incompleti. Non aggirare il controllo modificando a mano

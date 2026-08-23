@@ -14,3 +14,6 @@ secrets/
 *.key
 id_rsa*
 id_ed25519*
+publication-plan.json
+.pipeline-incrementale.json
+_ridotte/

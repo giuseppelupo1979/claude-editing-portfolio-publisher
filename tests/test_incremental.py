@@ -89,6 +89,113 @@ class IncrementalPipelineTest(unittest.TestCase):
         self.assertNotEqual(INCREMENTAL.canonical_hash(first), INCREMENTAL.canonical_hash(second))
         self.assertNotEqual(INCREMENTAL.canonical_hash(first), INCREMENTAL.canonical_hash(third))
 
+    def test_approval_covers_publication_only_and_ignores_local_deliverables(self):
+        base = INCREMENTAL.approval_document(analysis(), "source-a", "site-a")
+        for field, value in (("titolo", "Altre soglie"), ("statement", "Un altro statement.")):
+            changed = analysis()
+            changed["progetto"][field] = value
+            other = INCREMENTAL.approval_document(changed, "source-a", "site-a")
+            self.assertEqual(
+                INCREMENTAL.canonical_hash(base), INCREMENTAL.canonical_hash(other),
+                f"un cambio a progetto.{field} non deve invalidare l'autorizzazione",
+            )
+        with_colophon = analysis()
+        with_colophon["progetto"]["colophon"] = {"Edizione": ["Prima prova."]}
+        self.assertEqual(
+            INCREMENTAL.canonical_hash(base),
+            INCREMENTAL.canonical_hash(
+                INCREMENTAL.approval_document(with_colophon, "source-a", "site-a")
+            ),
+        )
+
+    def test_publication_block_still_binds_the_approval(self):
+        base = INCREMENTAL.approval_document(analysis(), "source-a", "site-a")
+        changed = analysis()
+        changed["pubblicazione"]["gallery"]["slug"] = "nuove-soglie"
+        self.assertNotEqual(
+            INCREMENTAL.canonical_hash(base),
+            INCREMENTAL.canonical_hash(
+                INCREMENTAL.approval_document(changed, "source-a", "site-a")
+            ),
+        )
+
+    def test_approval_is_required_only_when_publication_is_planned(self):
+        self.assertTrue(INCREMENTAL.needs_publication_approval(analysis()))
+        without = analysis()
+        del without["pubblicazione"]
+        self.assertFalse(INCREMENTAL.needs_publication_approval(without))
+        self.assertFalse(INCREMENTAL.needs_publication_approval(None))
+
+    def test_local_artifacts_build_without_any_recorded_approval(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "one.jpg").write_bytes(b"finto jpeg")
+            out = root / "_analisi"
+            out.mkdir()
+            data = analysis()
+            del data["pubblicazione"]
+            (out / "analisi.json").write_text(json.dumps(data), encoding="utf-8")
+            command = [sys.executable, str(SCRIPT), "build", str(root), "--confirm",
+                       "--only", "texts"]
+            result = subprocess.run(command, text=True, capture_output=True)
+            self.assertNotIn("non approvata", result.stdout + result.stderr)
+
+    def test_publication_still_refuses_to_build_without_approval(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            (root / "one.jpg").write_bytes(b"finto jpeg")
+            out = root / "_analisi"
+            out.mkdir()
+            (out / "analisi.json").write_text(json.dumps(analysis()), encoding="utf-8")
+
+            # L'ingestione va dichiarata corrente, altrimenti e' il suo guardiano
+            # a fermare la build e la firma non viene mai interrogata.
+            for name in ("metriche.json", "firma.json"):
+                (out / name).write_text("{}", encoding="utf-8")
+            for name in ("metriche.csv", "coppie_simili.csv", "saltati.csv"):
+                (out / name).write_text("id\n", encoding="utf-8")
+            for name in ("thumbs", "griglie"):
+                (out / name).mkdir()
+                (out / name / "P001_one.jpg").write_bytes(b"finta miniatura")
+            cache: dict = {}
+            inventory = INCREMENTAL.source_inventory(root, cache, True)
+            specs = INCREMENTAL.artifact_specs(root, out, inventory, analysis(), "site-a", cache, True)
+            state = {"version": INCREMENTAL.VERSION, "file_cache": cache, "artifacts": {}}
+            INCREMENTAL.record_artifact("ingest", specs["ingest"], state, cache)
+            INCREMENTAL.save_json(out / ".pipeline-incrementale.json", state)
+
+            command = [sys.executable, str(SCRIPT), "build", str(root), "--confirm",
+                       "--only", "publication", "--profile-id", "site-a"]
+            result = subprocess.run(command, text=True, capture_output=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("non approvata", result.stderr)
+
+    def test_xlsx_is_tracked_only_when_openpyxl_can_produce_it(self):
+        outputs = [path.name for path in INCREMENTAL.table_outputs(Path("/tmp/out"))]
+        self.assertIn("tabella.csv", outputs)
+        self.assertEqual("tabella.xlsx" in outputs, INCREMENTAL.xlsx_available())
+
+    def test_cache_drops_entries_of_files_that_no_longer_exist(self):
+        with tempfile.TemporaryDirectory() as folder:
+            alive = Path(folder) / "alive.jpg"
+            alive.write_bytes(b"x")
+            cache = {str(alive): {"sha256": "a"}, "/percorso/sparito.jpg": {"sha256": "b"}}
+            removed = INCREMENTAL.prune_cache(cache)
+            self.assertEqual(removed, 1)
+            self.assertEqual(list(cache), [str(alive)])
+
+    def test_malformed_analysis_reports_a_sentence_not_a_traceback(self):
+        broken = analysis()
+        broken["immagini"] = {"P001": {}}
+        with self.assertRaisesRegex(ValueError, "immagini"):
+            INCREMENTAL.check_analysis_shape(broken, Path("analisi.json"))
+
+    def test_doctor_output_is_redacted_before_it_reaches_the_report(self):
+        cleaned = INCREMENTAL.redact("Authorization: Bearer abcdefghijklmnopqrstuvwxyz e --token segretissimo")
+        self.assertNotIn("abcdefghijklmnopqrstuvwxyz", cleaned)
+        self.assertNotIn("segretissimo", cleaned)
+        self.assertIn("[REDACTED]", cleaned)
+
     def test_rehash_detects_content_change_even_with_same_size_and_mtime(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

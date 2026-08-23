@@ -5,6 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
+from pathlib import Path as _Path
+
+sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from lib.accenti import accenti_apostrofati
 from pathlib import Path
 from typing import Any
 
@@ -87,6 +92,7 @@ def resolve_location(
     confirmed_defaults = defaults if defaults.get("confirmed_by_user") is True else {}
     values: dict[str, Any] = {}
     sources: set[str] = set()
+    key_sources: dict[str, str | None] = {}
     raw_source = raw.get("location_source") or "explicit"
     analysis_source = image.get("location_source") or "analysis"
     for key in ("place", "lat", "lng"):
@@ -97,6 +103,7 @@ def resolve_location(
             (confirmed_defaults.get(key), "project-default"),
         )
         values[key] = value
+        key_sources[key] = source
         if source:
             sources.add(source)
 
@@ -115,10 +122,16 @@ def resolve_location(
     if missing:
         return values, missing
 
-    precision = raw.get("location_precision")
+    # "exact" e' il grado massimo di certezza e finisce pubblico sulla pagina
+    # Mappa. Lo assegna soltanto il GPS del file, oppure l'autore in modo
+    # esplicito: una coordinata scritta a mano resta una stima, e va detto.
+    # Conta la provenienza di lat/lng, non quella dell'etichetta "place".
+    precision = raw.get("location_precision") or image.get("location_precision")
     if not precision and "project-default" in sources:
         precision = confirmed_defaults.get("precision", "approximate")
-    precision = precision or "exact"
+    if not precision:
+        coordinate_sources = {key_sources["lat"], key_sources["lng"]}
+        precision = "exact" if coordinate_sources == {"exif"} else "approximate"
     if precision not in {"exact", "approximate"}:
         return values, ["location_precision non valida"]
     values["location_precision"] = precision
@@ -219,6 +232,27 @@ def normalize_photos(
     return result
 
 
+def controlla_accenti_pubblici(gallery: dict[str, Any], photos: list[dict[str, Any]]) -> None:
+    """Un apostrofo al posto di un accento non deve poter arrivare sul sito.
+
+    Qui il controllo fallisce invece di avvisare: questi testi escono di casa,
+    e correggerli dopo vuol dire entrare nel CMS a mano.
+    """
+    problemi: list[str] = []
+    for campo in ("title_it", "title_en", "description_it", "description_en"):
+        for sbagliata, giusta in accenti_apostrofati(gallery.get(campo)):
+            problemi.append(f"gallery.{campo}: \"{sbagliata}\" va scritto \"{giusta}\"")
+    for photo in photos:
+        for campo in ("title_it", "title_en", "alt_it", "alt_en", "place", "caption"):
+            for sbagliata, giusta in accenti_apostrofati(photo.get(campo)):
+                problemi.append(f"{photo['file']}.{campo}: \"{sbagliata}\" va scritto \"{giusta}\"")
+    if problemi:
+        fail("Accenti scritti con l'apostrofo nei testi destinati al sito: "
+             + "; ".join(problemi[:8])
+             + ("; e altri" if len(problemi) > 8 else "")
+             + ". Correggili in analisi.json prima di generare il piano.")
+
+
 def build_plan(
     analysis: dict[str, Any], profile_id: str, source_dir: Path, metrics: Any = None
 ) -> dict[str, Any]:
@@ -235,6 +269,7 @@ def build_plan(
     )
     if gallery["cover_file"] not in {photo["file"] for photo in photos}:
         fail("gallery.cover_file deve appartenere alle foto selezionate")
+    controlla_accenti_pubblici(gallery, photos)
 
     return {
         "plan_version": 2,
