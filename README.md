@@ -94,7 +94,9 @@ runtime di Directus, rebuild e verifica.
 | Componente | Dove vive | Responsabilità |
 |---|---|---|
 | `SKILL.md` | repository e installazione locale | regole editoriali e confini di autorizzazione |
-| `pipeline_incrementale.py` | locale | inventario SHA-256, approvazione unica e grafo di rigenerazione |
+| `verifica_integrita.py` | locale | confronta byte e SHA-256 di ogni file con `references/integrita.json`. È il primo comando di ogni sessione |
+| `lib/accenti.py` | locale | riconosce gli apostrofi usati al posto degli accenti. Avvisa nei testi di lavoro, blocca in quelli destinati al sito |
+| `pipeline_incrementale.py` | locale | inventario SHA-256, approvazione hashata della pubblicazione e grafo di rigenerazione |
 | `genera_payload_pubblicazione.py` | locale | trasforma il blocco `pubblicazione` nel piano validato |
 | `publish_directus.mjs` | locale | SSH, SCP, provisioning autorizzato, controlli locali, staging, release e verifica live |
 | `remote_directus.mjs` | VPS | provisioning tecnico, schema Directus, duplicati, upload, record, pubblicazione e rebuild |
@@ -147,6 +149,13 @@ e legata all'approvazione tramite hash. In sintesi comprende:
 - `admin_access=false` e `app_access=false`;
 - nessun accesso diretto al database;
 - nessun ruolo amministratore generale.
+
+L’utente tecnico non ha alcun permesso su `directus_users`, e questo ha una
+conseguenza che vale la pena conoscere prima di scriverci sopra del codice:
+Directus risponde a `/users/me` con il solo `id`. Ruolo, stato e marcatore non
+sono leggibili da quel token, e vanno verificati con il client amministrativo
+durante il provisioning, oppure dedotti da `/permissions/me`, che dice cosa il
+token può fare invece di come è etichettato.
 
 Le collezioni e i campi possono avere nomi diversi: vengono tradotti dal profilo
 JSON. Non sono ammessi wildcard di collezione. I mapping essenziali non possono
@@ -754,7 +763,11 @@ I test coprono:
 - ambito dell’approvazione: vincola la pubblicazione, non gli elaborati locali;
 - foglio Excel nel grafo delle dipendenze solo quando `openpyxl` può produrlo;
 - manifest di integrità completo, e rilevamento di file troncati o modificati;
-- potatura della cache, forma di `analisi.json`, redazione dell’output di doctor.
+- potatura della cache, forma di `analisi.json`, redazione dell’output di doctor;
+- il token tecnico certifica il proprio id e nient’altro, come fa Directus davvero;
+- `/server/health` letto senza pretendere l’incapsulamento in `data`;
+- accenti scritti con l’apostrofo: avviso nei testi di lavoro, errore in quelli
+  destinati al sito, nomi propri compresi.
 
 I test locali non contattano il sito reale e non modificano Directus.
 
@@ -836,6 +849,13 @@ di ogni file (`SKILL.md` compreso), crea il pacchetto `.skill` e infine rilancia
 `verifica_integrita.py` come postcondizione. `VERSIONE` viene scritto solo dopo che
 il pacchetto esiste, così un’interruzione a metà non lascia i sorgenti a dichiarare
 una versione mai impacchettata.
+
+Il pacchetto è **riproducibile**: viene costruito da una copia con le date dei
+file normalizzate, quindi lo stesso contenuto produce sempre gli stessi byte,
+anche su un checkout appena fatto dove le date sono tutte nuove. È la proprietà
+su cui si appoggia l’ultimo controllo della CI, che rigenera il pacchetto e
+fallisce se non coincide con quello committato: senza, il confronto segnalerebbe
+una differenza a ogni esecuzione.
 
 Poi si committa **sia** i sorgenti **sia** il pacchetto:
 
