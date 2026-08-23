@@ -24,6 +24,11 @@ import json
 import os
 import re
 import sys
+from pathlib import Path as _Path
+
+sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from lib.accenti import accenti_apostrofati
+import sys
 
 LISTA_NERA = [
     "riflessi", "frammenti", "attimi", "sguardi", "anime", "luci e ombre",
@@ -112,6 +117,29 @@ def controlla(dati, ids_tavole, pmin, pmax):
 
     if not registro:
         avvisi.append(("registro", "Nessun registro di didascalia dichiarato in progetto.registro_didascalie. Sceglierne uno e uno solo: muto, fattuale, contestuale, obliquo, citazionale."))
+
+    # accenti: si controlla tutto il testo destinato a essere letto
+    da_controllare = [(campo, prog.get(campo)) for campo in (
+        "titolo", "sottotitolo", "introduzione", "statement", "nota_autore",
+        "fil_rouge", "copertina_motivazione")]
+    for candidato in prog.get("titoli_candidati") or []:
+        if isinstance(candidato, dict):
+            da_controllare.append(("titolo candidato", candidato.get("titolo")))
+            da_controllare.append(("titolo candidato", candidato.get("motivazione")))
+    for sezione, voci in (prog.get("colophon") or {}).items():
+        for voce in voci or []:
+            da_controllare.append(("colophon %s" % sezione, voce))
+    for immagine in dati.get("immagini") or []:
+        for campo in ("titolo", "descrizione", "didascalia", "forza_principale", "limite_principale", "place"):
+            da_controllare.append(("%s.%s" % (immagine.get("id"), campo), immagine.get(campo)))
+    for c in dati.get("cluster") or []:
+        da_controllare.append(("cluster %s" % c.get("id", ""), c.get("nome")))
+        da_controllare.append(("cluster %s" % c.get("id", ""), c.get("tesi")))
+    for g in dati.get("gallerie") or []:
+        da_controllare.append(("galleria", g.get("nome")))
+    for campo, valore in da_controllare:
+        for sbagliata, giusta in accenti_apostrofati(valore):
+            avvisi.append((campo, "Apostrofo al posto dell'accento: \"%s\" va scritto \"%s\"." % (sbagliata, giusta)))
 
     # titoli
     for campo in ("titolo", "sottotitolo"):

@@ -488,6 +488,13 @@ precedente, piano, commissione. Nessun voto sulle singole immagini.
 
 - Italiano, registro informale, dai del tu.
 - **Mai trattini lunghi.** Usa virgole, due punti o parentesi.
+- **Accenti veri, mai apostrofi.** Si scrive è, più, perché, così, città, già,
+  però, sé, né, cioè, lì. Non si scrive e', piu', perche', cosi'. Vale per ogni
+  testo che finisce in `analisi.json`, e a maggior ragione per titoli, descrizioni
+  e alt text di una galleria, che finiscono su un sito pubblico e lì restano
+  finché qualcuno non li corregge a mano nel CMS. Lo stesso per i nomi propri:
+  Ballarò, non Ballaro. `genera_testi.py` lo segnala fra gli avvisi;
+  `genera_payload_pubblicazione.py` si rifiuta di generare il piano.
 - Vietati i complimenti generici. Ogni lode indica l'elemento preciso che la giustifica.
 - Vietato il linguaggio da manuale: parla di queste fotografie, non della fotografia.
 - Niente preamboli, niente "spero che questa analisi ti sia utile".
@@ -551,7 +558,7 @@ classificare bene le foto, ha funzionato a metà.
 
 <!-- INIZIO VERSIONE: generato da build-skill.sh, non modificare a mano -->
 
-**Versione 2026-08-23.4.** L'inventario completo, con byte e SHA-256 di ogni
+**Versione 2026-08-23.5.** L'inventario completo, con byte e SHA-256 di ogni
 file compreso questo, sta in `references/integrita.json` e si controlla con
 `scripts/verifica_integrita.py`.
 

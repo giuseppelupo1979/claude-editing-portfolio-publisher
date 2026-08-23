@@ -5,6 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
+from pathlib import Path as _Path
+
+sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from lib.accenti import accenti_apostrofati
 from pathlib import Path
 from typing import Any
 
@@ -227,6 +232,27 @@ def normalize_photos(
     return result
 
 
+def controlla_accenti_pubblici(gallery: dict[str, Any], photos: list[dict[str, Any]]) -> None:
+    """Un apostrofo al posto di un accento non deve poter arrivare sul sito.
+
+    Qui il controllo fallisce invece di avvisare: questi testi escono di casa,
+    e correggerli dopo vuol dire entrare nel CMS a mano.
+    """
+    problemi: list[str] = []
+    for campo in ("title_it", "title_en", "description_it", "description_en"):
+        for sbagliata, giusta in accenti_apostrofati(gallery.get(campo)):
+            problemi.append(f"gallery.{campo}: \"{sbagliata}\" va scritto \"{giusta}\"")
+    for photo in photos:
+        for campo in ("title_it", "title_en", "alt_it", "alt_en", "place", "caption"):
+            for sbagliata, giusta in accenti_apostrofati(photo.get(campo)):
+                problemi.append(f"{photo['file']}.{campo}: \"{sbagliata}\" va scritto \"{giusta}\"")
+    if problemi:
+        fail("Accenti scritti con l'apostrofo nei testi destinati al sito: "
+             + "; ".join(problemi[:8])
+             + ("; e altri" if len(problemi) > 8 else "")
+             + ". Correggili in analisi.json prima di generare il piano.")
+
+
 def build_plan(
     analysis: dict[str, Any], profile_id: str, source_dir: Path, metrics: Any = None
 ) -> dict[str, Any]:
@@ -243,6 +269,7 @@ def build_plan(
     )
     if gallery["cover_file"] not in {photo["file"] for photo in photos}:
         fail("gallery.cover_file deve appartenere alle foto selezionate")
+    controlla_accenti_pubblici(gallery, photos)
 
     return {
         "plan_version": 2,

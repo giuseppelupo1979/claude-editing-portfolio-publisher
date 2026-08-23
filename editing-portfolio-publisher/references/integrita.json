@@ -1,11 +1,11 @@
 {
-  "versione": "2026-08-23.4",
-  "impronta": "fe9121d389b1",
+  "versione": "2026-08-23.5",
+  "impronta": "18e912eda82d",
   "file": [
     {
       "path": "SKILL.md",
-      "byte": 34237,
-      "sha256": "1010a8530694c5c1282666b8898eaa25b4814853f79ecda6a15f9473ca7a4666"
+      "byte": 34787,
+      "sha256": "25fcfd0974e1e4476285edd3d1c14d41541b6cf7c4f4d4b2e6ad40ea03954888"
     },
     {
       "path": "agents/openai.yaml",
@@ -94,8 +94,8 @@
     },
     {
       "path": "scripts/genera_payload_pubblicazione.py",
-      "byte": 11512,
-      "sha256": "979c45f38067df353d24898cf715ce8c8f37a4bdc99b64330b40522b4e93da9e"
+      "byte": 12853,
+      "sha256": "5bb28d84d2c49e62b93b634e8be726175fd527516577371973eb558c51408740"
     },
     {
       "path": "scripts/genera_provino_html.py",
@@ -104,8 +104,13 @@
     },
     {
       "path": "scripts/genera_testi.py",
-      "byte": 19807,
-      "sha256": "224764ff40e8a861f98a721f03b090ac7018c67f81f4d02f043a8c0a9253af43"
+      "byte": 21412,
+      "sha256": "3d536016a47adf2b9c1e4c19dbf6ac3d8fea6467e65eedf031f220664e48e7c5"
+    },
+    {
+      "path": "scripts/lib/accenti.py",
+      "byte": 3237,
+      "sha256": "8a7b375f833caa02cedc749ad351d104a6e90c9c3e78468a885c9d71946df9e4"
     },
     {
       "path": "scripts/lib/publisher-core.mjs",
