@@ -1,11 +1,11 @@
 {
-  "versione": "2026-08-23.1",
-  "impronta": "1201cccac776",
+  "versione": "2026-08-23.2",
+  "impronta": "2902e800035c",
   "file": [
     {
       "path": "SKILL.md",
-      "byte": 34497,
-      "sha256": "6b559776a820b8b7a445ce89705e09d1f67430688cd9ae01f329eb2131cba5ba"
+      "byte": 34237,
+      "sha256": "95dd6c619d542848ef262b17f93cc5e053e5b18b2a45a8a4840b111779c65f79"
     },
     {
       "path": "agents/openai.yaml",

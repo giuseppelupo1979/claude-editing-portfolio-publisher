@@ -1,6 +1,6 @@
 ---
 name: editing-portfolio-publisher
-description: Analizza insiemi di fotografie (una cartella, un progetto, più immagini caricate) come singoli scatti e come corpus. Misura ogni file, fa il triage, seleziona, individua il fil rouge e i temi ricorrenti, crea cluster e gallerie tematiche con nomi proposti, e in modalità photo editor monta un libro fotografico completo (selezione, titolo, sequenza, spread, didascalie, dummy PDF). Gestisce anche edit per mostra, portfolio online e concorsi, e diagnostica i difetti ricorrenti dell'autore con piano di crescita. Può inoltre preparare e pubblicare una selezione su un portfolio Directus configurato localmente, sempre con proposta approvata e conferma separata prima della messa online. Usala ogni volta che le immagini sono più di due, o quando l'utente indica una cartella di foto, o parla di portfolio, progetto, serie, selezione, editing, sequenza, libro fotografico, menabò, dummy, gallerie, temi comuni, fil rouge, didascalie, quali foto tenere o scartare, in che ordine metterle, cosa hanno in comune, vuole candidarsi a un concorso o vuole mettere delle foto sul proprio sito. Usala anche per "guarda queste foto e dimmi che ne pensi nell'insieme". Per la critica di una singola immagine isolata usa critica-fotografica.
+description: Analizza insiemi di fotografie come singoli scatti e come corpus: misura, triage, selezione, fil rouge, cluster e gallerie, e in modalità photo editor monta un libro completo con sequenza, spread, didascalie e dummy PDF. Gestisce edit per mostra, portfolio online e concorsi, diagnostica i difetti ricorrenti, e può pubblicare una selezione su un portfolio Directus configurato localmente, con proposta approvata e conferma separata. Usala ogni volta che le immagini sono più di due, o quando l'utente indica una cartella di foto, o parla di portfolio, progetto, serie, selezione, editing, sequenza, libro fotografico, menabò, dummy, gallerie, temi comuni, fil rouge, didascalie, quali foto tenere o scartare, in che ordine metterle, cosa hanno in comune, vuole candidarsi a un concorso o mettere delle foto sul proprio sito. Usala anche per "guarda queste foto e dimmi che ne pensi nell'insieme". Per la critica di una singola immagine isolata usa critica-fotografica.
 ---
 
 # Editing, portfolio e pubblicazione
@@ -551,7 +551,7 @@ classificare bene le foto, ha funzionato a metà.
 
 <!-- INIZIO VERSIONE: generato da build-skill.sh, non modificare a mano -->
 
-**Versione 2026-08-23.1.** L'inventario completo, con byte e SHA-256 di ogni
+**Versione 2026-08-23.2.** L'inventario completo, con byte e SHA-256 di ogni
 file compreso questo, sta in `references/integrita.json` e si controlla con
 `scripts/verifica_integrita.py`.
 
