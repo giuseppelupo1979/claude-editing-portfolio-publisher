@@ -811,9 +811,33 @@ function maxSort(items, mapping) {
   return Math.max(0, ...items.map((item) => Number(getMapped(item, mapping, 'sort')) || 0));
 }
 
-async function uploadFile(client, path, fileName) {
+const MIME_PER_ESTENSIONE = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+  bmp: 'image/bmp',
+  gif: 'image/gif',
+  avif: 'image/avif',
+  heic: 'image/heic',
+  heif: 'image/heif',
+};
+
+// Il tipo va dichiarato nel Blob: senza, il multipart parte come application/octet-stream,
+// Directus registra il file con quel tipo e senza dimensioni, e non lo ridimensiona piu':
+// ogni miniatura del sito scarica l'originale intero (12-16 MB per uno scatto da 24 MP).
+export function mimeType(fileName) {
+  const estensione = String(fileName).toLowerCase().split('.').pop();
+  const tipo = MIME_PER_ESTENSIONE[estensione];
+  if (!tipo) throw new Error(`Estensione non gestita per l'upload: ${fileName}`);
+  return tipo;
+}
+
+export async function uploadFile(client, path, fileName) {
   const form = new FormData();
-  form.append('file', new Blob([await readFile(path)]), fileName);
+  form.append('file', new Blob([await readFile(path)], { type: mimeType(fileName) }), fileName);
   return client.request('/files', { method: 'POST', form });
 }
 

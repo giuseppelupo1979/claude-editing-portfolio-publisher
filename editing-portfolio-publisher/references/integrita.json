@@ -1,11 +1,11 @@
 {
-  "versione": "2026-08-23.5",
-  "impronta": "18e912eda82d",
+  "versione": "2026-11-13.1",
+  "impronta": "41a69a95c3e8",
   "file": [
     {
       "path": "SKILL.md",
       "byte": 34787,
-      "sha256": "25fcfd0974e1e4476285edd3d1c14d41541b6cf7c4f4d4b2e6ad40ea03954888"
+      "sha256": "13b696ff3e58aa3115cf5117512c34a80421c5cfd49835cac561227aa0253ff4"
     },
     {
       "path": "agents/openai.yaml",
@@ -134,8 +134,8 @@
     },
     {
       "path": "scripts/remote_directus.mjs",
-      "byte": 38623,
-      "sha256": "274d37c5fa5beff6dbad61db8cb7a8489aecf375f108f89858eb05121dda14c8"
+      "byte": 39456,
+      "sha256": "a727c4240b5b3320e34ee9ad6a6a8652418fff681707e03c69b625dffb317448"
     },
     {
       "path": "scripts/verifica_integrita.py",
