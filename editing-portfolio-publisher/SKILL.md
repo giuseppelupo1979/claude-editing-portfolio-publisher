@@ -558,7 +558,7 @@ classificare bene le foto, ha funzionato a metà.
 
 <!-- INIZIO VERSIONE: generato da build-skill.sh, non modificare a mano -->
 
-**Versione 2026-08-23.5.** L'inventario completo, con byte e SHA-256 di ogni
+**Versione 2026-11-13.1.** L'inventario completo, con byte e SHA-256 di ogni
 file compreso questo, sta in `references/integrita.json` e si controlla con
 `scripts/verifica_integrita.py`.
 
